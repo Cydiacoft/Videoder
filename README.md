@@ -70,6 +70,8 @@ tools/build_core.sh                  # Linux / macOS
 
 Windows 也可以运行 `./build.ps1`，或 `./build.ps1 -Clean`。构建输出位于 `build/windows/x64/runner/Release/`；分发时应打包整个 Release 目录，不要只复制 exe。构建产物放到 GitHub Releases，不提交到源码仓库。
 
+GitHub Actions 的 `macos-arm64` 任务在 Apple Silicon 运行器上构建 macOS 应用，并将包含 C++ 核心的 `.app` 打成 `Videoder-v<版本>-macos-arm64.zip`。在仓库的 [Actions 页面](https://github.com/Cydiacoft/Videoder/actions/workflows/dart.yml)打开成功的 `main` 构建，从 `videoder-macos-arm64` 产物下载 ZIP；也可手动运行此工作流。该 CI 产物仅用于构建验证，尚未完成 macOS 实机运行、开发者签名与公证，因此目前正式发行版仍只有 Windows 包。
+
 真实媒体测试需要外部 FFmpeg（同目录应有 ffprobe）：
 
 ```powershell

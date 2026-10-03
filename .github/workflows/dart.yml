@@ -4,6 +4,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -40,3 +41,35 @@ jobs:
           # The bridge tests load the real library through this override; without
           # it they would only exercise the "core unavailable" paths.
           VIDEODER_CORE_LIBRARY: ${{ github.workspace }}/build/native/videoder_core/libvideoder_core.so
+  macos-arm64:
+    if: github.event_name != 'pull_request'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build Apple Silicon app
+        run: |
+          test "$(uname -m)" = arm64
+          flutter config --enable-macos-desktop --enable-macos-arm64-only
+          flutter pub get
+          flutter build macos --release
+      - name: Verify and package app
+        run: |
+          app="build/macos/Build/Products/Release/videoder_demo.app"
+          test -d "$app"
+          test -f "$app/Contents/Frameworks/libvideoder_core.dylib"
+          lipo -verify_arch arm64 "$app/Contents/MacOS/videoder_demo"
+          lipo -verify_arch arm64 "$app/Contents/Frameworks/libvideoder_core.dylib"
+          version="$(sed -n 's/^version: //p' pubspec.yaml)"
+          test -n "$version"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/Videoder-v${version}-macos-arm64.zip"
+          shasum -a 256 "dist/Videoder-v${version}-macos-arm64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videoder-macos-arm64
+          path: dist/*.zip
+          if-no-files-found: error
