@@ -61,8 +61,8 @@ jobs:
           app="build/macos/Build/Products/Release/videoder_demo.app"
           test -d "$app"
           test -f "$app/Contents/Frameworks/libvideoder_core.dylib"
-          lipo -verify_arch arm64 "$app/Contents/MacOS/videoder_demo"
-          lipo -verify_arch arm64 "$app/Contents/Frameworks/libvideoder_core.dylib"
+          test "$(lipo -archs "$app/Contents/MacOS/videoder_demo")" = arm64
+          test "$(lipo -archs "$app/Contents/Frameworks/libvideoder_core.dylib")" = arm64
           version="$(sed -n 's/^version: //p' pubspec.yaml)"
           test -n "$version"
           mkdir -p dist
