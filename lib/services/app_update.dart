@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 class AppUpdate {
-  static const repository = 'https://github.com/Cydiacoft/videoder_demo';
+  static const repository = 'https://github.com/Cydiacoft/Videoder';
   static Future<String> currentVersion() async {
     final manifest = await rootBundle.loadString('pubspec.yaml');
     final match =
@@ -91,9 +91,9 @@ class AppUpdate {
       final request = await client
           .getUrl(endpoint ??
               Uri.parse(
-                  'https://api.github.com/repos/Cydiacoft/videoder_demo/releases/latest'))
+                  'https://api.github.com/repos/Cydiacoft/Videoder/releases/latest'))
           .timeout(const Duration(seconds: 15));
-      request.headers.set('User-Agent', 'Videoader-update-check');
+      request.headers.set('User-Agent', 'Videoder-update-check');
       request.headers.set('Accept', 'application/vnd.github+json');
       final response =
           await request.close().timeout(const Duration(seconds: 15));

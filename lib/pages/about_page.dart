@@ -123,9 +123,8 @@ class _AboutPageState extends State<AboutPage> {
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _downloadStatus = error is UpdateDownloadCancelled
-            ? '下载已取消。'
-            : '下载失败：$error');
+        setState(() => _downloadStatus =
+            error is UpdateDownloadCancelled ? '下载已取消。' : '下载失败：$error');
       }
     } finally {
       if (mounted) {
@@ -155,7 +154,7 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('关于 Videoader')),
+        appBar: AppBar(title: const Text('关于 Videoder')),
         body: Center(
             child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 760),
@@ -163,7 +162,7 @@ class _AboutPageState extends State<AboutPage> {
                   Image.asset('assets/branding/app_icon.png',
                       width: 72, height: 72),
                   const SizedBox(height: 16),
-                  Text('Videoader · FFmpeg Studio',
+                  Text('Videoder · FFmpeg Studio',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
@@ -211,10 +210,10 @@ class _AboutPageState extends State<AboutPage> {
                                 label: const Text('选择下载目录')),
                             if (_asset != null)
                               FilledButton.icon(
-                                  onPressed: _downloading ||
-                                          _downloadPath == null
-                                      ? null
-                                      : _download,
+                                  onPressed:
+                                      _downloading || _downloadPath == null
+                                          ? null
+                                          : _download,
                                   icon: const Icon(Icons.download, size: 18),
                                   label: const Text('下载并校验更新包')),
                             if (_downloading)
@@ -230,13 +229,15 @@ class _AboutPageState extends State<AboutPage> {
                           if (_asset == null)
                             const Padding(
                                 padding: EdgeInsets.only(top: 8),
-                                child: Text('该版本没有可校验的 Windows x64 压缩包，请查看发布页面。')),
+                                child:
+                                    Text('该版本没有可校验的 Windows x64 压缩包，请查看发布页面。')),
                           if (_downloading && _downloadProgress != null) ...[
                             const SizedBox(height: 12),
                             LinearProgressIndicator(
                                 value: _downloadProgress!.fraction),
                             const SizedBox(height: 6),
-                            Text('${(_downloadProgress!.fraction * 100).toStringAsFixed(1)}%'
+                            Text(
+                                '${(_downloadProgress!.fraction * 100).toStringAsFixed(1)}%'
                                 ' · ${(_downloadProgress!.received / 1048576).toStringAsFixed(1)}'
                                 ' / ${(_downloadProgress!.total / 1048576).toStringAsFixed(1)} MB'),
                           ],
@@ -272,7 +273,7 @@ class _AboutPageState extends State<AboutPage> {
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => showLicensePage(
                                 context: context,
-                                applicationName: 'Videoader',
+                                applicationName: 'Videoder',
                                 applicationVersion: _version)),
                       ])),
                 ]))),

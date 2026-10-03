@@ -8,6 +8,7 @@ import 'extensions/registry.dart';
 import 'extensions/toolbox_extension.dart';
 import 'pages/settings_page.dart';
 import 'pages/expert_page.dart';
+import 'pages/image_page.dart';
 import 'pages/toolbox_page.dart';
 import 'providers/media_provider.dart';
 import 'providers/app_provider.dart';
@@ -16,10 +17,7 @@ import 'theme/studio_theme.dart';
 
 /// Attaches to the native core before the first frame.
 ///
-/// Phase 1 only reports availability: a missing or incompatible
-/// `videoder_core` library is visible in the log immediately instead of
-/// surfacing at the first task. Features move onto this instance from Phase 2
-/// onwards; nothing in the UI depends on it yet.
+/// A missing or incompatible native core is reported before the first frame.
 void _attachNativeCore() {
   final core = videoderCore;
   if (core == null) {
@@ -34,9 +32,9 @@ void main() {
   _attachNativeCore();
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(
-        ['Videoader'], await rootBundle.loadString('LICENSE'));
+        ['Videoder'], await rootBundle.loadString('LICENSE'));
     yield LicenseEntryWithLineBreaks(
-        ['Videoader · 历史版权声明'], await rootBundle.loadString('NOTICE'));
+        ['Videoder · 历史版权声明'], await rootBundle.loadString('NOTICE'));
   });
   runApp(const ProviderScope(child: VideoaderApp()));
 }
@@ -51,7 +49,7 @@ class _VideoaderAppState extends State<VideoaderApp> {
   ThemeMode _mode = ThemeMode.system;
   @override
   Widget build(BuildContext context) => MaterialApp(
-      title: 'Videoader · FFmpeg Studio',
+      title: 'Videoder · FFmpeg Studio',
       debugShowCheckedModeBanner: false,
       theme: studioTheme(Brightness.light),
       darkTheme: studioTheme(Brightness.dark),
@@ -149,7 +147,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         .where((e) => enabled.contains(e.id))
         .expand((e) => e.pages)
         .toList();
-    if (_selected >= 6 + pages.length) _selected = 4;
+    if (_selected >= 7 + pages.length) _selected = 4;
     final narrow = MediaQuery.sizeOf(context).width < 860;
     return Scaffold(
         body: Column(children: [
@@ -182,7 +180,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text('Videoader',
+                                Text('Videoder',
                                     style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w700,
@@ -207,13 +205,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                     _nav(2, '视频压缩', Icons.compress_rounded, narrow),
                     _nav(3, '视频剪切', Icons.content_cut_rounded, narrow),
                     _nav(5, '专业工作台', Icons.terminal_rounded, narrow),
+                    _nav(6, '图像处理', Icons.image_outlined, narrow),
                     if (pages.isNotEmpty) ...[
                       if (!narrow)
                         _caption('扩展工具')
                       else
                         const SizedBox(height: 20),
                       for (var i = 0; i < pages.length; i++)
-                        _nav(i + 6, pages[i].label, pages[i].icon, narrow)
+                        _nav(i + 7, pages[i].label, pages[i].icon, narrow)
                     ],
                   ])),
                   const Divider(indent: 16, endIndent: 16, height: 18),
@@ -298,10 +297,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                           TickerMode(
                               enabled: _selected == 5,
                               child: const ExpertPage()),
+                          TickerMode(
+                              enabled: _selected == 6,
+                              child:
+                                  ImagePage(onOpenSettings: () => _select(4))),
                           for (var i = 0; i < pages.length; i++)
                             TickerMode(
                                 key: ValueKey(pages[i].id),
-                                enabled: _selected == i + 6,
+                                enabled: _selected == i + 7,
                                 child: pages[i].build()),
                         ])))),
       ])),

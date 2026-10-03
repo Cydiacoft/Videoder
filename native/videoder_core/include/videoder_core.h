@@ -63,7 +63,7 @@ extern "C" {
 #endif
 
 /* ABI revision of this header. Bump only for incompatible changes. */
-#define VD_CORE_ABI_VERSION 3u
+#define VD_CORE_ABI_VERSION 4u
 
 /* Log messages longer than this are truncated. Bounded payloads are required
  * because the event queue is bounded: worst case memory is capacity * this. */
@@ -777,6 +777,14 @@ VD_CORE_API int32_t vd_ffmpeg_build_media_args(
     VDCoreHandle* handle,
     const VDMediaCommandOptions* options,
     VDStringArray* out_args);
+
+/* Validates an image edit, video cover or frame request and builds FFmpeg
+ * arguments. request_json is a UTF-8 object with operation, input_path,
+ * output_path, format, time_seconds and optional crop/scale/rotation fields.
+ * Output strings use the same per-handle scratch lifetime as other builders. */
+VD_CORE_API VDError vd_image_build_args(VDCoreHandle* handle,
+                                       const char* request_json,
+                                       VDStringArray* out_args);
 
 /*
  * Video codec families a container accepts, in preference order. An unknown

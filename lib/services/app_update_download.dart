@@ -23,15 +23,18 @@ class UpdateAsset {
     final version = release['version'] ?? release['tag_name'];
     final assets = release['assets'];
     if (version is! String || assets is! List) return null;
-    final expected = 'Videoader-$version-windows-x64.zip';
+    final expected = 'Videoder-$version-windows-x64.zip';
     for (final candidate in assets) {
       if (candidate is! Map) continue;
       if (candidate['name'] != expected) continue;
       final rawUrl = candidate['browser_download_url'];
       final rawSize = candidate['size'];
       final rawDigest = candidate['digest'];
-      if (rawUrl is! String || rawSize is! int || rawSize <= 0 ||
-          rawDigest is! String || !rawDigest.startsWith('sha256:')) {
+      if (rawUrl is! String ||
+          rawSize is! int ||
+          rawSize <= 0 ||
+          rawDigest is! String ||
+          !rawDigest.startsWith('sha256:')) {
         return null;
       }
       final digest = rawDigest.substring(7).toLowerCase();
@@ -47,7 +50,7 @@ class UpdateAsset {
   static bool _trustedAssetUrl(Uri uri) =>
       uri.scheme == 'https' &&
       uri.host == 'github.com' &&
-      uri.path.startsWith('/Cydiacoft/videoder_demo/releases/download/');
+      uri.path.startsWith('/Cydiacoft/Videoder/releases/download/');
 }
 
 class UpdateDownloadProgress {
@@ -93,13 +96,17 @@ class AppUpdateDownloader {
     }
     final temporary = File('${destination.path}.part');
     if (await temporary.exists()) await temporary.delete();
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
     _client = client;
     RandomAccessFile? output;
     try {
-      final request = await client.getUrl(asset.url).timeout(const Duration(seconds: 15));
-      request.headers.set(HttpHeaders.userAgentHeader, 'Videoader-update-download');
-      final response = await request.close().timeout(const Duration(seconds: 30));
+      final request =
+          await client.getUrl(asset.url).timeout(const Duration(seconds: 15));
+      request.headers
+          .set(HttpHeaders.userAgentHeader, 'Videoder-update-download');
+      final response =
+          await request.close().timeout(const Duration(seconds: 30));
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException('下载失败（HTTP ${response.statusCode}）');
       }

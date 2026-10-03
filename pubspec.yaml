@@ -2,7 +2,7 @@ name: videoader
 description: A desktop FFmpeg toolbox with an optional yt-dlp extension.
 publish_to: 'none'
 
-version: 26.10.3+6
+version: 26.10.3+7
 
 environment:
   # NativeCallable.listener / NativeFinalizer (used by lib/core_bridge) need

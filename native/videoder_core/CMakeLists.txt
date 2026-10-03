@@ -26,6 +26,7 @@ set(VD_CORE_SOURCES
   src/api/api_support.cpp
   src/api/download_api.cpp
   src/api/ffmpeg_api.cpp
+  src/api/image_api.cpp
   src/api/task_api.cpp
   src/api/videoder_core_api.cpp
   src/core/core_context.cpp
@@ -36,6 +37,7 @@ set(VD_CORE_SOURCES
   src/ffmpeg/expert_command.cpp
   src/ffmpeg/expert_constraints.cpp
   src/ffmpeg/gpu_quality_args.cpp
+  src/ffmpeg/image_command.cpp
   src/ffmpeg/media_command.cpp
   src/ffmpeg/media_formats.cpp
   src/ffmpeg/media_progress.cpp
@@ -164,6 +166,8 @@ if(VD_CORE_BUILD_TESTS)
     tests/test_hardware.cpp tests/vd_test_support.cpp)
   add_executable(videoder_core_tests_ffmpeg_args
     tests/test_ffmpeg_args.cpp tests/vd_test_support.cpp)
+  add_executable(videoder_core_tests_image
+    tests/test_image.cpp tests/vd_test_support.cpp)
   add_executable(videoder_core_tests_expert_args
     tests/test_expert_args.cpp tests/vd_test_support.cpp)
   add_executable(videoder_core_tests_media_task
@@ -181,6 +185,7 @@ if(VD_CORE_BUILD_TESTS)
     videoder_core_tests_media
     videoder_core_tests_hardware
     videoder_core_tests_ffmpeg_args
+    videoder_core_tests_image
     videoder_core_tests_expert_args
     videoder_core_tests_media_task
     videoder_core_tests_gpu_probe

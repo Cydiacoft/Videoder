@@ -298,7 +298,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _group([
           ListTile(
               leading: const Icon(Icons.info_outline),
-              title: const Text('关于 Videoader'),
+              title: const Text('关于 Videoder'),
               subtitle: const Text('版本信息、检查更新与开源许可'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(

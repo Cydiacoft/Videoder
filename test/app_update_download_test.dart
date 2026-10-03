@@ -11,9 +11,9 @@ void main() {
       'version': 'v26.10.3+6',
       'assets': [
         {
-          'name': 'Videoader-v26.10.3+6-windows-x64.zip',
+          'name': 'Videoder-v26.10.3+6-windows-x64.zip',
           'browser_download_url':
-              'https://github.com/Cydiacoft/videoder_demo/releases/download/v26.10.3%2B6/Videoader-v26.10.3%2B6-windows-x64.zip',
+              'https://github.com/Cydiacoft/Videoder/releases/download/v26.10.3%2B6/Videoder-v26.10.3%2B6-windows-x64.zip',
           'size': 3,
           'digest': 'sha256:${'a' * 64}',
         }
@@ -27,7 +27,8 @@ void main() {
 
   test('streams, verifies and reuses a completed archive', () async {
     final bytes = utf8.encode('verified update archive');
-    final directory = await Directory.systemTemp.createTemp('videoader-update-');
+    final directory =
+        await Directory.systemTemp.createTemp('videoader-update-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async {
       await server.close(force: true);
@@ -40,7 +41,7 @@ void main() {
       await request.response.close();
     });
     final asset = UpdateAsset(
-      name: 'Videoader-v1.0.0-windows-x64.zip',
+      name: 'Videoder-v1.0.0-windows-x64.zip',
       url: Uri.parse('http://127.0.0.1:${server.port}/asset'),
       size: bytes.length,
       sha256Digest: sha256.convert(bytes).toString(),
@@ -59,7 +60,8 @@ void main() {
 
   test('bad digest does not leave a completed or partial archive', () async {
     final bytes = utf8.encode('invalid archive');
-    final directory = await Directory.systemTemp.createTemp('videoader-update-');
+    final directory =
+        await Directory.systemTemp.createTemp('videoader-update-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async {
       await server.close(force: true);
@@ -70,7 +72,7 @@ void main() {
       await request.response.close();
     });
     final asset = UpdateAsset(
-      name: 'Videoader-v1.0.0-windows-x64.zip',
+      name: 'Videoder-v1.0.0-windows-x64.zip',
       url: Uri.parse('http://127.0.0.1:${server.port}/asset'),
       size: bytes.length,
       sha256Digest: '0' * 64,
@@ -82,7 +84,8 @@ void main() {
 
   test('cancellation removes the partial archive', () async {
     final bytes = List<int>.filled(1024 * 32, 1);
-    final directory = await Directory.systemTemp.createTemp('videoader-update-');
+    final directory =
+        await Directory.systemTemp.createTemp('videoader-update-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async {
       await server.close(force: true);
@@ -96,7 +99,7 @@ void main() {
       await request.response.close();
     });
     final asset = UpdateAsset(
-      name: 'Videoader-v1.0.0-windows-x64.zip',
+      name: 'Videoder-v1.0.0-windows-x64.zip',
       url: Uri.parse('http://127.0.0.1:${server.port}/asset'),
       size: bytes.length * 2,
       sha256Digest: sha256.convert([...bytes, ...bytes]).toString(),

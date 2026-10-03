@@ -48,6 +48,12 @@ void main() {
     expect(find.text('FFmpeg Studio'), findsOneWidget);
     expect(find.text('网络下载'), findsNothing);
     expect(find.text('Cookie 管理'), findsNothing);
+    await tester.tap(find.text('图像处理').first);
+    await tester.pumpAndSettle();
+    expect(find.text('图像编辑'), findsOneWidget);
+    await tester.tap(find.text('视频截图'));
+    await tester.pumpAndSettle();
+    expect(find.text('时间点（秒）'), findsOneWidget);
     await tester.tap(find.text('视频剪切').first);
     await tester.pumpAndSettle();
     expect(find.text('开始时间'), findsOneWidget);
@@ -58,9 +64,9 @@ void main() {
     expect(find.text('检测版本'), findsOneWidget);
     await tester.tap(find.byTooltip('返回设置'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('关于 Videoader'));
+    await tester.ensureVisible(find.text('关于 Videoder'));
     rootBundle.evict('pubspec.yaml');
-    await tester.tap(find.text('关于 Videoader'));
+    await tester.tap(find.text('关于 Videoder'));
     await tester.pumpAndSettle();
     expect(find.text('检查更新'), findsOneWidget);
     expect(find.text('版本 ${await AppUpdate.currentVersion()}'), findsOneWidget);
@@ -208,9 +214,9 @@ void main() {
     await tester.pumpAndSettle();
     await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('../docs/screenshots/settings.png'));
-    await tester.ensureVisible(find.text('关于 Videoader'));
+    await tester.ensureVisible(find.text('关于 Videoder'));
     rootBundle.evict('pubspec.yaml');
-    await tester.tap(find.text('关于 Videoader'));
+    await tester.tap(find.text('关于 Videoder'));
     await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 150));

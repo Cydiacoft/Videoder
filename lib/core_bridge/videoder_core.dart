@@ -94,8 +94,8 @@ class VideoderCore implements Finalizable {
     final library = NativeLibraryLoader.open(libraryPath: libraryPath);
     // Check the version before binding newly added symbols. An older DLL must
     // report an ABI mismatch, not a missing-symbol exception during lookup.
-    final abiVersion = library
-        .lookupFunction<Uint32 Function(), int Function()>(
+    final abiVersion =
+        library.lookupFunction<Uint32 Function(), int Function()>(
             'vd_core_abi_version')();
     if (abiVersion != kSupportedCoreAbiVersion) {
       throw VideoderCoreException(
@@ -600,6 +600,30 @@ class VideoderCore implements Finalizable {
     } finally {
       output.free();
       malloc.free(request);
+    }
+  }
+
+  /// Native core validates image options and constructs the FFmpeg command.
+  /// Flutter supplies user choices and displays the outcome only.
+  List<String> buildImageArguments(Map<String, dynamic> request) {
+    final payload = jsonEncode(request).toNativeUtf8();
+    var output = NativeStringArray(_initialArgumentCapacity);
+    try {
+      var status =
+          _bindings.buildImageArguments(_openHandle, payload, output.pointer);
+      _checkNativeCode('vd_image_build_args', status);
+      final count = stringArrayCount(output.pointer);
+      if (count > output.capacity) {
+        output.free();
+        output = NativeStringArray(count);
+        status =
+            _bindings.buildImageArguments(_openHandle, payload, output.pointer);
+        _checkNativeCode('vd_image_build_args', status);
+      }
+      return readStringArray(output.pointer);
+    } finally {
+      output.free();
+      malloc.free(payload);
     }
   }
 

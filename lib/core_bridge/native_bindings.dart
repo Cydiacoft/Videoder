@@ -16,7 +16,7 @@ import 'native_event.dart';
 
 /// ABI revision this Dart code understands. Must match
 /// `VD_CORE_ABI_VERSION` in videoder_core.h.
-const int kSupportedCoreAbiVersion = 3;
+const int kSupportedCoreAbiVersion = 4;
 
 /// Opaque `VDCoreHandle`.
 final class VDCoreHandle extends Opaque {}
@@ -739,6 +739,11 @@ typedef _BuildMediaArgsDart = int Function(
     Pointer<VDMediaCommandOptionsStruct> options,
     Pointer<VDStringArrayStruct> outArgs);
 
+typedef _BuildImageArgsNative = Int32 Function(
+    Pointer<VDCoreHandle>, Pointer<Utf8>, Pointer<VDStringArrayStruct>);
+typedef _BuildImageArgsDart = int Function(
+    Pointer<VDCoreHandle>, Pointer<Utf8>, Pointer<VDStringArrayStruct>);
+
 typedef _DownloadBuildNative = Int32 Function(
     Pointer<VDCoreHandle>, Pointer<Utf8>, Pointer<VDStringArrayStruct>);
 typedef _DownloadBuildDart = int Function(
@@ -848,8 +853,8 @@ typedef _MediaTaskCancelDart = int Function(
 
 typedef _TaskSnapshotNative = Int32 Function(Pointer<VDCoreHandle> handle,
     Uint64 taskId, Pointer<Pointer<Utf8>> outJson);
-typedef _TaskSnapshotDart = int Function(Pointer<VDCoreHandle> handle,
-    int taskId, Pointer<Pointer<Utf8>> outJson);
+typedef _TaskSnapshotDart = int Function(
+    Pointer<VDCoreHandle> handle, int taskId, Pointer<Pointer<Utf8>> outJson);
 
 typedef _GpuProbeStartNative = Int32 Function(Pointer<VDCoreHandle> handle,
     Pointer<VDGpuProbeOptionsStruct> options, Pointer<Uint64> outTaskId);
@@ -1011,6 +1016,9 @@ class NativeBindings {
     _buildMediaArgs =
         library.lookupFunction<_BuildMediaArgsNative, _BuildMediaArgsDart>(
             'vd_ffmpeg_build_media_args');
+    _buildImageArgs =
+        library.lookupFunction<_BuildImageArgsNative, _BuildImageArgsDart>(
+            'vd_image_build_args');
     _downloadBuild =
         library.lookupFunction<_DownloadBuildNative, _DownloadBuildDart>(
             'vd_download_build_args');
@@ -1025,10 +1033,12 @@ class NativeBindings {
     _downloadTaskRelease =
         library.lookupFunction<_MediaTaskReleaseNative, _MediaTaskReleaseDart>(
             'vd_download_task_release_result');
-    _taskSnapshot = library.lookupFunction<_TaskSnapshotNative,
-        _TaskSnapshotDart>('vd_task_snapshot');
-    _taskCancel = library.lookupFunction<_MediaTaskCancelNative,
-        _MediaTaskCancelDart>('vd_task_cancel');
+    _taskSnapshot =
+        library.lookupFunction<_TaskSnapshotNative, _TaskSnapshotDart>(
+            'vd_task_snapshot');
+    _taskCancel =
+        library.lookupFunction<_MediaTaskCancelNative, _MediaTaskCancelDart>(
+            'vd_task_cancel');
     _videoCodecs = library.lookupFunction<_VideoCodecsNative, _VideoCodecsDart>(
         'vd_ffmpeg_video_codecs_for_format');
     _expertArgs = library.lookupFunction<_ExpertArgsNative, _ExpertArgsDart>(
@@ -1111,6 +1121,7 @@ class NativeBindings {
   late final _HardwareReleaseResultDart _hardwareReleaseResult;
   late final _HardwareCancelDart _hardwareCancel;
   late final _BuildMediaArgsDart _buildMediaArgs;
+  late final _BuildImageArgsDart _buildImageArgs;
   late final _DownloadBuildDart _downloadBuild;
   late final _DownloadProgressDart _downloadProgress;
   late final _DownloadTaskStartDart _downloadTaskStart;
@@ -1358,6 +1369,10 @@ class NativeBindings {
   int buildDownloadArguments(Pointer<VDCoreHandle> handle,
           Pointer<Utf8> requestJson, Pointer<VDStringArrayStruct> outArgs) =>
       _downloadBuild(handle, requestJson, outArgs);
+
+  int buildImageArguments(Pointer<VDCoreHandle> handle,
+          Pointer<Utf8> requestJson, Pointer<VDStringArrayStruct> outArgs) =>
+      _buildImageArgs(handle, requestJson, outArgs);
 
   String? parseDownloadProgress(Pointer<VDCoreHandle> handle, String line) {
     final nativeLine = line.toNativeUtf8();
