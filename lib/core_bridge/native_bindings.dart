@@ -1631,7 +1631,8 @@ class NativeBindings {
       List<String> arguments,
       double durationSeconds,
       String? outputPath,
-      int timeoutMs) {
+      int timeoutMs,
+      bool stillImage) {
     final options = calloc<VDMediaTaskOptionsStruct>();
     final strings = NativeStringTable();
     final argv = NativeStringArrayInput(arguments);
@@ -1639,7 +1640,7 @@ class NativeBindings {
     try {
       options.ref
         ..structSize = sizeOf<VDMediaTaskOptionsStruct>()
-        ..flags = 0
+        ..flags = stillImage ? 1 : 0
         ..timeoutMs = timeoutMs
         ..argumentCount = arguments.length
         ..ffmpegPath = strings.keep(ffmpegPath)

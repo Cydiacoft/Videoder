@@ -483,7 +483,7 @@ typedef enum VDMediaTaskStatus {
 
 typedef struct VDMediaTaskOptions {
     uint32_t    struct_size;
-    uint32_t    flags;            /* reserved, must be 0 */
+    uint32_t    flags;            /* VD_MEDIA_TASK_FLAG_* */
     /* Wall-clock budget. 0 means "no timeout": a long encode is bounded by
      * cancellation instead. */
     uint32_t    timeout_ms;
@@ -501,6 +501,9 @@ typedef struct VDMediaTaskOptions {
      * what command-editor runs do. */
     const char* output_path;
 } VDMediaTaskOptions;
+
+/* A still image may report out_time=0 even when FFmpeg wrote a valid file. */
+#define VD_MEDIA_TASK_FLAG_STILL_IMAGE 0x00000001u
 
 typedef struct VDMediaTaskResult {
     uint32_t    struct_size;

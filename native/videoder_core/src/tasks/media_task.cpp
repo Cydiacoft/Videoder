@@ -134,12 +134,13 @@ MediaTaskOutcome RunMediaTask(const MediaTaskRequest& request,
   }
   // Mirror the host rule exactly: with no expected output file, only the exit
   // code decides (a command-editor run may legitimately produce no media, for
-  // example `-f null -`); with one, media must have been produced and the file
-  // must exist and be non-empty.
+  // example `-f null -`); with one, the file must be non-empty. Video and audio
+  // also require a positive progress timestamp; still images may report zero.
   outcome.output_verified =
       request.output_path.empty()
           ? true
-          : (outcome.produced_media && HasNonEmptyFile(request.output_path));
+          : ((request.still_image || outcome.produced_media) &&
+             HasNonEmptyFile(request.output_path));
   const bool succeeded =
       process_outcome.exit_code == 0 && outcome.output_verified;
   outcome.status =

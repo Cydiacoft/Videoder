@@ -75,8 +75,8 @@ VDError vd_media_task_start(VDCoreHandle* handle,
         "this ABI");
     return VD_ERROR_INVALID_ARGUMENT;
   }
-  if (options->flags != 0) {
-    SetLastError("vd_media_task_start: flags must be 0");
+  if ((options->flags & ~VD_MEDIA_TASK_FLAG_STILL_IMAGE) != 0) {
+    SetLastError("vd_media_task_start: unsupported flags");
     return VD_ERROR_INVALID_ARGUMENT;
   }
   if (options->arguments == nullptr || options->argument_count == 0) {
@@ -97,6 +97,7 @@ VDError vd_media_task_start(VDCoreHandle* handle,
     request.arguments.emplace_back(options->arguments[index]);
   }
   request.duration_seconds = options->duration_seconds;
+  request.still_image = (options->flags & VD_MEDIA_TASK_FLAG_STILL_IMAGE) != 0;
   if (options->output_path != nullptr) {
     request.output_path = options->output_path;
   }

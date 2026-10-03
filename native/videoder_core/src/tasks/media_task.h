@@ -3,7 +3,8 @@
 // The rules here are the ones `lib/providers/media_provider.dart` applied:
 //   * a run succeeds only when it was not cancelled, ffmpeg did not refuse to
 //     overwrite, the exit code is 0, and - when an output file was expected -
-//     media was actually produced and the file exists and is not empty;
+//     media was actually produced and the file exists and is not empty. Still
+//     images use the non-empty output file instead of a positive timestamp;
 //   * stdout lines that are progress fields are consumed, everything else is a
 //     log line;
 //   * stderr is always a log line, and two specific messages mean "refused to
@@ -49,6 +50,8 @@ struct MediaTaskRequest {
   /// Output file to verify when the run finishes. Empty skips the check, which
   /// is what command-editor runs do.
   std::string output_path;
+  /// A non-empty still image is sufficient even when FFmpeg reports time 0.
+  bool still_image = false;
   /// Wall-clock budget. Zero means "no timeout": a long encode is bounded by
   /// cancellation instead.
   std::chrono::milliseconds timeout{0};

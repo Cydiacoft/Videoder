@@ -98,6 +98,7 @@ class ImageProcessor {
         ffmpegPath: resolveExecutable(ffmpegPath, 'ffmpeg'),
         arguments: arguments,
         outputPath: temporary.path,
+        stillImage: true,
         onStarted: (taskId) {
           _taskId = taskId;
           if (_cancelled) core.cancelMediaTask(taskId);
@@ -110,8 +111,9 @@ class ImageProcessor {
         throw const ImageProcessingCancelled();
       }
       if (!outcome.succeeded) {
-        throw StateError(
-            outcome.error ?? lastError ?? '图像处理失败（退出码 ${outcome.exitCode}）');
+        throw StateError(outcome.error?.isNotEmpty == true
+            ? outcome.error!
+            : lastError ?? '图像处理失败（退出码 ${outcome.exitCode}）');
       }
       if (await output.exists()) throw const FileSystemException('输出文件已存在，请重试');
       return await temporary.rename(output.path);

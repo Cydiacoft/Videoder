@@ -929,13 +929,14 @@ class VideoderCore implements Finalizable {
     String? outputPath,
     double durationSeconds = 0,
     int timeoutMs = 0,
+    bool stillImage = false,
     void Function(int taskId)? onStarted,
     void Function(MediaTaskProgress progress)? onProgress,
     void Function(bool isStderr, String line)? onLog,
   }) async {
     final handle = _openHandle;
-    final taskId = _bindings.mediaTaskStart(
-        handle, ffmpegPath, arguments, durationSeconds, outputPath, timeoutMs);
+    final taskId = _bindings.mediaTaskStart(handle, ffmpegPath, arguments,
+        durationSeconds, outputPath, timeoutMs, stillImage);
     if (taskId == 0) {
       throw VideoderCoreException(
         operation: 'vd_media_task_start',
