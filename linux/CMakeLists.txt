@@ -75,6 +75,13 @@ set_target_properties(${BINARY_NAME}
 include(flutter/generated_plugins.cmake)
 
 
+# === Videoder native core ===
+# Own target with its own C++ standard. It is installed into the bundle's lib/
+# directory, which the Dart loader resolves relative to the executable.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native/videoder_core"
+  "${CMAKE_BINARY_DIR}/videoder_core")
+
+
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
 # directory.
@@ -92,6 +99,10 @@ set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+# Native core: the Dart loader finds it next to the executable's lib/ directory.
+install(TARGETS videoder_core LIBRARY DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

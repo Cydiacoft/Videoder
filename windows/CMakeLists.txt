@@ -61,6 +61,15 @@ add_subdirectory("runner")
 include(flutter/generated_plugins.cmake)
 
 
+# === Videoder native core ===
+# Deliberately its own target: it needs C++20 and enabled C++ exceptions, while
+# APPLY_STANDARD_SETTINGS() above gives the runner _HAS_EXCEPTIONS=0. Dart loads
+# videoder_core.dll from the directory next to the executable, which is where
+# the install rule below puts it.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native/videoder_core"
+  "${CMAKE_BINARY_DIR}/videoder_core")
+
+
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
 # run in place. This is done instead of making a separate bundle (as on Linux)
@@ -76,6 +85,11 @@ set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+# Native core: must be loadable by Dart at runtime, so it lives next to the
+# executable in both the build tree and the release bundle.
+install(TARGETS videoder_core RUNTIME DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

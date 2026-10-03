@@ -8,6 +8,7 @@ import 'package:videoader/main.dart';
 import 'package:videoader/extensions/toolbox_extension.dart';
 import 'package:videoader/plugins/yt_dlp/providers/download_provider.dart';
 import 'package:videoader/plugins/yt_dlp/providers/activity_provider.dart';
+import 'package:videoader/services/app_update.dart';
 
 class TestDownloadSettings extends DownloadSettingsNotifier {
   TestDownloadSettings(this.directory);
@@ -62,7 +63,7 @@ void main() {
     await tester.tap(find.text('关于 Videoader'));
     await tester.pumpAndSettle();
     expect(find.text('检查更新'), findsOneWidget);
-    expect(find.text('版本 26.9.21+5'), findsOneWidget);
+    expect(find.text('版本 ${await AppUpdate.currentVersion()}'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(Switch));
@@ -215,7 +216,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 150));
     });
     await tester.pumpAndSettle();
-    expect(find.text('版本 26.9.21+5'), findsOneWidget);
+    expect(find.text('版本 ${await AppUpdate.currentVersion()}'), findsOneWidget);
     await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('../docs/screenshots/about.png'));
     await tester.pageBack();

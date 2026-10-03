@@ -12,6 +12,9 @@ import '../providers/media_provider.dart';
 import '../services/expert_command.dart';
 import '../services/audio_expert_command.dart';
 import '../services/media_inspector.dart';
+import '../services/gpu_acceleration.dart';
+import '../services/expert_constraints.dart';
+import '../services/tool_process.dart';
 import '../theme/studio_theme.dart';
 
 class ExpertPage extends ConsumerStatefulWidget {
@@ -40,39 +43,123 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
   final _end = TextEditingController(text: '10');
   String _encoder = 'libx264';
   String _audio = 'aac';
-  String _hardware = 'none';
+  String _videoFormat = 'mp4';
+  bool _gpuPipeline = false;
+  String? _detectedPath;
+  List<String>? _availableVideo;
+  List<String>? _availableAudio;
+  List<String> _verifiedGpu = [];
+  final Set<String> _pipelineEncoders = {};
+  String? _pipelineSource;
+  String _adjustment = '';
   String _speedPreset = 'medium';
-  List<String> _encoders = [
-    'libx264',
-    'libx265',
-    'libaom-av1',
-    'libsvtav1',
-    'h264_nvenc',
-    'hevc_nvenc',
-    'h264_qsv',
-    'hevc_qsv',
-    'h264_amf',
-    'hevc_amf',
-    'h264_videotoolbox',
-    'copy'
-  ];
-  List<String> _audioEncoders = [
-    'aac',
-    'libmp3lame',
-    'flac',
-    'pcm_s16le',
-    'copy',
-    'none'
-  ];
-  List<String> _hardwareOptions = [
-    'none',
-    'auto',
-    'cuda',
-    'qsv',
-    'd3d11va',
-    'vaapi',
-    'videotoolbox'
-  ];
+  List<String> get _formatOptions => _preset == ExpertPreset.gif
+      ? ['gif']
+      : _preset == ExpertPreset.remux
+          ? ['mkv']
+          : _preset == ExpertPreset.subtitles
+              ? ['mkv', 'mp4', 'mov']
+              : ExpertConstraints.formats;
+  int? get _maxInputs => _audioMode
+      ? (_audioPreset == AudioPreset.merge ? null : 1)
+      : _preset == ExpertPreset.merge
+          ? null
+          : _preset == ExpertPreset.subtitles
+              ? 2
+              : 1;
+  String get _effectiveFormat {
+    final extension = ExpertConstraints.formatOf(_output.text);
+    return _output.text.trim().isEmpty ? _videoFormat : extension;
+  }
+
+  bool get _canUseGpuPipeline =>
+      _pipelineEncoders.contains(_encoder) &&
+      _inputs.isNotEmpty &&
+      _pipelineSource == _inputs.first &&
+      [ExpertPreset.transcode, ExpertPreset.resize].contains(_preset) &&
+      (_videoFilter.text.trim().isEmpty ||
+          RegExp(r'^scale=\d+:-2$').hasMatch(_videoFilter.text.trim()));
+  List<String> get _encoders => _preset == ExpertPreset.remux
+      ? ['copy']
+      : _preset == ExpertPreset.gif
+          ? ['gif']
+          : ExpertConstraints.videoFor(_effectiveFormat,
+              available: _availableVideo, verifiedGpu: _verifiedGpu);
+  List<String> get _audioEncoders => _preset == ExpertPreset.remux
+      ? ['copy']
+      : _preset == ExpertPreset.gif
+          ? ['none']
+          : [
+              for (final encoder
+                  in ExpertConstraints.audioFor(_effectiveFormat))
+                if (_availableAudio == null ||
+                    _availableAudio!.contains(encoder))
+                  encoder,
+              if (_preset != ExpertPreset.merge) 'none',
+            ];
+
+  void _reconcile() {
+    final changes = <String>[];
+    final video = _encoders, audio = _audioEncoders;
+    if (video.isNotEmpty && !video.contains(_encoder)) {
+      _encoder = video.first;
+      changes.add('视频编码已调整为 $_encoder');
+    }
+    if (audio.isNotEmpty && !audio.contains(_audio)) {
+      // Never silently discard audio while the user edits an output suffix
+      // or when a build lacks the required audio encoder.
+      final replacements = audio.where((value) => value != 'none').toList();
+      if (_preset == ExpertPreset.gif || replacements.isNotEmpty) {
+        _audio = _preset == ExpertPreset.gif ? 'none' : replacements.first;
+        changes.add('音频编码已调整为 $_audio');
+      }
+    }
+    if (_gpuPipeline && !_canUseGpuPipeline) {
+      _gpuPipeline = false;
+      changes.add('当前操作或滤镜不支持已验证的 GPU 解码，已关闭此选项');
+    }
+    final range = ExpertConstraints.qualityRange(_encoder);
+    final quality = int.tryParse(_quality.text);
+    if (quality != null && (quality < range.min || quality > range.max)) {
+      _quality.text = '${quality.clamp(range.min, range.max)}';
+      changes.add('质量值已调整到当前编码器范围');
+    }
+    if (changes.isNotEmpty) _adjustment = changes.join('；');
+  }
+
+  List<String> _videoArguments() => ExpertCommand.build(
+        preset: _preset,
+        inputs: _inputs,
+        output: _output.text.trim(),
+        encoder: _encoder,
+        audioEncoder: _audio,
+        videoBitrate: _videoBitrate.text.trim(),
+        audioBitrate: _audioBitrate.text.trim(),
+        quality: _quality.text.trim(),
+        encoderPreset: _speedPreset,
+        gpuPipeline: _gpuPipeline && _canUseGpuPipeline,
+        videoFilter: _videoFilter.text,
+        audioFilter: _audioFilter.text,
+      );
+
+  String? get _wizardError {
+    if (_audioMode) return null;
+    if (!_formatOptions.contains(_effectiveFormat)) {
+      return '当前操作支持 ${_formatOptions.join('、').toUpperCase()}，请修改输出格式或文件后缀。';
+    }
+    if (_encoders.isEmpty) return '当前输出格式没有可用的视频编码器，请更换格式或重新检测。';
+    if (_audioEncoders.isEmpty || !_audioEncoders.contains(_audio)) {
+      return '当前输出格式没有可用的音频编码器，请更换格式、重新检测或手动选择不保留音轨。';
+    }
+    if (_inputs.isEmpty) return null;
+    try {
+      _videoArguments();
+    } on FormatException catch (error) {
+      return error.message;
+    }
+    return null;
+  }
+
   String _message = '';
   bool _working = false;
   bool _logsExpanded = false;
@@ -98,16 +185,11 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
     super.dispose();
   }
 
-  String get _extension => _audioMode
-      ? '.$_audioFormat'
-      : _preset == ExpertPreset.gif
-          ? '.gif'
-          : _preset == ExpertPreset.remux ||
-                  _preset == ExpertPreset.subtitles ||
-                  _preset == ExpertPreset.merge
-              ? '.mkv'
-              : '.mp4';
-  void _changed() => setState(() => _stale = _arguments.text.isNotEmpty);
+  String get _extension => _audioMode ? '.$_audioFormat' : '.$_videoFormat';
+  void _changed() => setState(() {
+        _reconcile();
+        _stale = _arguments.text.isNotEmpty;
+      });
   Future<void> _guard(Future<void> Function() action) async {
     try {
       await action();
@@ -117,11 +199,19 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
   }
 
   Future<void> _addInputs() => _guard(() async {
-        final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+        final result =
+            await FilePicker.platform.pickFiles(allowMultiple: _maxInputs != 1);
         if (result == null || !mounted) return;
+        final paths =
+            result.files.map((f) => f.path).whereType<String>().toList();
+        if (_maxInputs != null && _inputs.length + paths.length > _maxInputs!) {
+          setState(() => _message = '当前操作最多需要 $_maxInputs 个输入，请先移除多余素材。');
+          return;
+        }
         setState(() {
-          _inputs.addAll(result.files.map((f) => f.path).whereType<String>());
+          _inputs.addAll(paths);
           _metadata = null;
+          _reconcile();
           _stale = _arguments.text.isNotEmpty;
           if (_output.text.isEmpty && _inputs.isNotEmpty) {
             _output.text = p.join(
@@ -140,12 +230,14 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
         if (path != null && mounted) {
           setState(() {
             _output.text = path;
+            _reconcile();
             _stale = _arguments.text.isNotEmpty;
           });
         }
       });
   bool _generate({bool openEditor = true}) {
     try {
+      if (_wizardError != null) throw FormatException(_wizardError!);
       final args = _audioMode
           ? AudioExpertCommand.build(
               preset: _audioPreset,
@@ -158,19 +250,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
               start: _start.text,
               end: _end.text,
             )
-          : ExpertCommand.build(
-              preset: _preset,
-              inputs: _inputs,
-              output: _output.text.trim(),
-              encoder: _encoder,
-              audioEncoder: _audio,
-              videoBitrate: _videoBitrate.text.trim(),
-              audioBitrate: _audioBitrate.text.trim(),
-              quality: _quality.text.trim(),
-              encoderPreset: _speedPreset,
-              hwaccel: _hardware,
-              videoFilter: _videoFilter.text,
-              audioFilter: _audioFilter.text);
+          : _videoArguments();
       setState(() {
         _arguments.text = ArgumentCodec.format(args);
         _message = '参数已生成，可直接编辑后执行。';
@@ -193,14 +273,66 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
     setState(() => _working = true);
     await _guard(() async {
       final caps = await MediaInspector.capabilities(path!);
-      if (mounted) {
+      final report = await MediaInspector.probeGpuEncoders(path, caps.video,
+          isCancelled: () =>
+              !mounted || ref.read(appSettingsProvider).ffmpegPath != path,
+          onProgress: (encoder, index, total) {
+            if (mounted) {
+              setState(() => _message = '正在测试硬件 $index / $total：$encoder');
+            }
+          });
+      final source = _inputs.isEmpty ? null : _inputs.first;
+      final pipelineEncoders = <String>{};
+      if (source != null) {
+        for (final encoder
+            in report.usable.where((e) => e.endsWith('_nvenc'))) {
+          if (!mounted || ref.read(appSettingsProvider).ffmpegPath != path) {
+            return;
+          }
+          setState(() => _message = '正在验证当前素材的 GPU 解码与缩放：$encoder');
+          final args = ExpertCommand.build(
+              preset: ExpertPreset.resize,
+              inputs: [source],
+              output: 'probe.mp4',
+              encoder: encoder,
+              audioEncoder: 'none',
+              gpuPipeline: true);
+          args.removeLast();
+          try {
+            final result = await runTool(resolveExecutable(path, 'ffmpeg'), [
+              '-hide_banner',
+              '-nostdin',
+              ...args,
+              '-frames:v',
+              '3',
+              '-progress',
+              'pipe:1',
+              '-f',
+              'null',
+              '-',
+            ]);
+            if (result.exitCode == 0 &&
+                RegExp(r'frame=\s*[1-9]\d*')
+                    .hasMatch(result.stdout.toString())) {
+              pipelineEncoders.add(encoder);
+            }
+          } on Exception {/* Keep ordinary GPU encoding available. */}
+        }
+      }
+      if (mounted && ref.read(appSettingsProvider).ffmpegPath == path) {
         setState(() {
-          _encoders = {...caps.video, _encoder, 'copy'}.toList();
-          _audioEncoders = {...caps.audio, _audio, 'copy', 'none'}.toList();
-          _hardwareOptions =
-              {'none', 'auto', ...caps.hardware, _hardware}.toList();
-          _message =
-              '检测到 ${caps.video.length} 个视频编码器、${caps.audio.length} 个音频编码器。硬件选项代表构建支持，能否运行还取决于显卡和驱动。';
+          _availableVideo = caps.video;
+          _availableAudio = caps.audio;
+          _verifiedGpu = report.usable;
+          _detectedPath = path;
+          _pipelineEncoders
+            ..clear()
+            ..addAll(pipelineEncoders);
+          _pipelineSource = source;
+          _reconcile();
+          _stale = _arguments.text.isNotEmpty;
+          _message = '检测完成：只显示当前格式兼容的编码器；${report.usable.length} 个硬件编码器通过试编码。'
+              '${source == null ? '添加素材后重新检测，可验证 GPU 解码与缩放。' : '当前素材有 ${pipelineEncoders.length} 个 GPU 解码与缩放组合通过测试。'}';
         });
       }
     });
@@ -242,7 +374,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
           ValueChanged<String> changed, bool disabled) =>
       DropdownButtonFormField<String>(
           key: ValueKey('$label:$value:${items.length}'),
-          initialValue: value,
+          initialValue: items.contains(value) ? value : null,
           isExpanded: true,
           menuMaxHeight: 320,
           decoration: InputDecoration(labelText: label),
@@ -253,7 +385,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12))))
               .toList(),
-          onChanged: disabled
+          onChanged: disabled || items.isEmpty
               ? null
               : (v) {
                   changed(v!);
@@ -408,6 +540,17 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final job = ref.watch(mediaProvider);
+    final enginePath = ref.watch(appSettingsProvider).ffmpegPath;
+    if (_detectedPath != null && _detectedPath != enginePath) {
+      _availableVideo = null;
+      _availableAudio = null;
+      _verifiedGpu = [];
+      _pipelineEncoders.clear();
+      _detectedPath = null;
+      _reconcile();
+      _stale = _arguments.text.isNotEmpty;
+    }
+    final wizardError = _wizardError;
     final busy = job.running || _working;
     final encode = _preset != ExpertPreset.remux && _preset != ExpertPreset.gif;
     final simpleFilters = _preset != ExpertPreset.merge &&
@@ -525,6 +668,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                           final value = _inputs.removeAt(i);
                                           _inputs.insert(i - 1, value);
                                           _metadata = null;
+                                          _reconcile();
                                           _stale = _arguments.text.isNotEmpty;
                                         }),
                                 icon: const Icon(Icons.arrow_upward, size: 15)),
@@ -535,6 +679,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                     : () => setState(() {
                                           _inputs.removeAt(i);
                                           _metadata = null;
+                                          _reconcile();
                                           _stale = _arguments.text.isNotEmpty;
                                         }),
                                 icon: const Icon(Icons.close, size: 15))
@@ -572,7 +717,23 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                         onChanged: busy
                                             ? null
                                             : (v) => setState(() {
+                                                  if (_preset ==
+                                                          ExpertPreset.gif &&
+                                                      v != ExpertPreset.gif) {
+                                                    _audio = 'aac';
+                                                  }
                                                   _preset = v!;
+                                                  _videoFormat = _preset ==
+                                                          ExpertPreset.gif
+                                                      ? 'gif'
+                                                      : [
+                                                          ExpertPreset.remux,
+                                                          ExpertPreset
+                                                              .subtitles,
+                                                          ExpertPreset.merge
+                                                        ].contains(_preset)
+                                                          ? 'mkv'
+                                                          : 'mp4';
                                                   _videoFilter.clear();
                                                   _audioFilter.clear();
                                                   if (_output.text.isNotEmpty) {
@@ -581,6 +742,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                                             _output.text,
                                                             _extension);
                                                   }
+                                                  _reconcile();
                                                   _stale = _arguments
                                                       .text.isNotEmpty;
                                                 }))),
@@ -607,6 +769,22 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                           const SizedBox(height: 22),
                           const Text('推荐设置可直接使用。只有需要精细控制时，才展开高级参数。',
                               style: TextStyle(fontSize: 12)),
+                          const SizedBox(height: 16),
+                          _select('输出格式', _effectiveFormat, _formatOptions,
+                              (value) {
+                            _videoFormat = value;
+                            if (_output.text.isNotEmpty) {
+                              _output.text =
+                                  p.setExtension(_output.text, '.$value');
+                            }
+                          }, busy),
+                          const SizedBox(height: 8),
+                          Text(
+                              _preset == ExpertPreset.remux
+                                  ? '向导换封装使用 MKV 保留原轨道；无需选择编码器。'
+                                  : '编码器按输出格式自动筛选；硬件编码需先检测通过。滤镜操作会重新编码。',
+                              style: TextStyle(
+                                  fontSize: 12, color: c.onSurfaceVariant)),
                           const SizedBox(height: 12),
                           if (_preset == ExpertPreset.resize)
                             DropdownButtonFormField<String>(
@@ -665,6 +843,8 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                     },
                             ),
                           ExpansionTile(
+                            key: const PageStorageKey('expert-video-advanced'),
+                            maintainState: true,
                             tilePadding: EdgeInsets.zero,
                             title: const Text('高级参数',
                                 style: TextStyle(fontSize: 14)),
@@ -676,19 +856,32 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                   icon: const Icon(Icons.memory, size: 15),
                                   label: Text(_working ? '检测中' : '检测编码器与硬件支持')),
                               const SizedBox(height: 16),
+                              if (!_canUseGpuPipeline)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 12),
+                                  child: Text(
+                                      '默认使用软件解码。添加素材并检测通过后，可为 NVIDIA 转码或缩放启用 GPU 解码。',
+                                      style: TextStyle(fontSize: 12)),
+                                ),
+                              if (_canUseGpuPipeline)
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('GPU 解码与缩放（NVIDIA）'),
+                                  subtitle: const Text(
+                                      '让视频解码、预设缩放和编码在显卡内完成；需要显卡支持源视频解码。'),
+                                  value: _gpuPipeline,
+                                  onChanged: busy
+                                      ? null
+                                      : (value) {
+                                          _gpuPipeline = value;
+                                          _changed();
+                                        },
+                                ),
                               Wrap(spacing: 12, runSpacing: 16, children: [
                                 SizedBox(
                                     width: 240,
                                     child: _select('视频编码器', _encoder, _encoders,
                                         (v) => _encoder = v, busy || !encode)),
-                                SizedBox(
-                                    width: 210,
-                                    child: _select(
-                                        '硬件解码加速',
-                                        _hardware,
-                                        _hardwareOptions,
-                                        (v) => _hardware = v,
-                                        busy || _preset == ExpertPreset.remux)),
                                 SizedBox(
                                     width: 190,
                                     child: _field('视频码率（可选）', _videoBitrate,
@@ -697,7 +890,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                 SizedBox(
                                     width: 180,
                                     child: _field(
-                                        'CRF（软件编码器）',
+                                        '编码质量（数值越低越清晰）',
                                         _quality,
                                         busy ||
                                             !encode ||
@@ -707,9 +900,11 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                               'libx265',
                                               'libaom-av1',
                                               'libsvtav1',
-                                              'libvpx-vp9'
+                                              'libvpx-vp9',
+                                              ...GpuAcceleration.allEncoders,
                                             ].contains(_encoder),
-                                        hint: '码率留空时使用')),
+                                        hint:
+                                            '${ExpertConstraints.qualityRange(_encoder).min}–${ExpertConstraints.qualityRange(_encoder).max}，码率留空时使用')),
                                 SizedBox(
                                     width: 240,
                                     child: _select(
@@ -756,12 +951,12 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                               ]),
                               const SizedBox(height: 18),
                               _field('视频滤镜（-vf）', _videoFilter,
-                                  busy || !simpleFilters,
+                                  busy || !simpleFilters || _gpuPipeline,
                                   hint:
                                       'scale=1920:-2,fps=30 或 crop=1280:720:0:0'),
                               const SizedBox(height: 16),
                               _field('音频滤镜（-af）', _audioFilter,
-                                  busy || !simpleFilters,
+                                  busy || !simpleFilters || _audio == 'none',
                                   hint: 'loudnorm 或 volume=0.8'),
                               const SizedBox(height: 18),
                             ],
@@ -775,11 +970,25 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                 child: const Text('浏览'))
                           ]),
                           const SizedBox(height: 18),
+                          if (_adjustment.isNotEmpty)
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Text(_adjustment,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: c.onSurfaceVariant))),
+                          if (wizardError != null)
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Text(wizardError,
+                                    style: TextStyle(
+                                        fontSize: 12, color: c.error))),
                           Wrap(spacing: 12, runSpacing: 10, children: [
                             FilledButton.icon(
                               onPressed: busy ||
                                       _inputs.isEmpty ||
-                                      _output.text.trim().isEmpty
+                                      _output.text.trim().isEmpty ||
+                                      wizardError != null
                                   ? null
                                   : () async {
                                       if (_generate(openEditor: false)) {
@@ -796,7 +1005,9 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                       ref.read(mediaProvider.notifier).cancel,
                                   child: const Text('取消处理')),
                             OutlinedButton.icon(
-                                onPressed: busy || _inputs.isEmpty
+                                onPressed: busy ||
+                                        _inputs.isEmpty ||
+                                        wizardError != null
                                     ? null
                                     : () => _generate(),
                                 icon: const Icon(Icons.code, size: 16),
@@ -864,6 +1075,8 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                   child: const Text('保存参数'))
                             ]),
                         const SizedBox(height: 10),
+                        const Text('命令编辑使用自由参数，不应用向导的兼容组合筛选。',
+                            style: TextStyle(fontSize: 12)),
                         TextField(
                             controller: _arguments,
                             enabled: !job.running,

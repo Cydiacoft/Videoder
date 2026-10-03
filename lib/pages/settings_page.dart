@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../extensions/registry.dart';
 import '../extensions/toolbox_extension.dart';
+import '../services/gpu_acceleration.dart';
 import '../theme/studio_theme.dart';
 
 import 'about_page.dart';
@@ -18,6 +19,8 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   String _status = '';
   bool _checking = false;
+  bool _checkingGpu = false;
+  String _gpuStatus = '';
   Future<void> _guard(Future<void> Function() action) async {
     try {
       await action();
@@ -77,6 +80,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           children[i],
         ]
       ]));
+  String _gpuSummary(AppSettings s) {
+    final parts = [
+      for (final family in GpuAcceleration.families)
+        if (s.gpu.encoderFor(family) != null)
+          '${GpuAcceleration.labels[family]} · ${GpuAcceleration.vendorLabel(s.gpu.encoderFor(family)!)}',
+    ];
+    return parts.isEmpty ? '先检测编码器与硬件支持' : '${parts.join('，')} · GPU 编码';
+  }
+
+  Widget _gpuEncoderSelect(
+      String label, String? value, List<String> options, String family) {
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: DropdownButtonFormField<String>(
+            key: ValueKey('gpu-$family:$value'),
+            initialValue: value ?? '',
+            isExpanded: true,
+            decoration: InputDecoration(labelText: label),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('不使用（CPU 编码）')),
+              for (final encoder in options)
+                DropdownMenuItem(
+                    value: encoder,
+                    child: Text(
+                        '${GpuAcceleration.vendorLabel(encoder)} · $encoder',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12))),
+            ],
+            onChanged: (v) => _guard(() => ref
+                .read(appSettingsProvider.notifier)
+                .setGpuEncoder(
+                    family: family,
+                    encoder: (v == null || v.isEmpty) ? null : v))));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
@@ -147,6 +185,68 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     padding: const EdgeInsets.only(top: 14),
                     child: SelectableText(_status,
                         style: TextStyle(fontSize: 12, color: c.primary))),
+              const SizedBox(height: 26),
+              const Divider(),
+              const SizedBox(height: 18),
+              _heading(
+                  Icons.speed_rounded, 'GPU 加速', '使用显卡硬件编码，缓解全用 CPU 导致的卡顿'),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('启用 GPU 加速'),
+                  subtitle: Text(_gpuSummary(settings),
+                      style:
+                          TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+                  value: settings.gpuAcceleration,
+                  onChanged: !settings.gpu.available
+                      ? null
+                      : (value) => _guard(() => ref
+                          .read(appSettingsProvider.notifier)
+                          .setGpuAcceleration(value))),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                  onPressed: _checkingGpu
+                      ? null
+                      : () async {
+                          setState(() {
+                            _checkingGpu = true;
+                            _gpuStatus = '正在读取 FFmpeg 编码能力…';
+                          });
+                          await _guard(() async {
+                            final result = await ref
+                                .read(appSettingsProvider.notifier)
+                                .detectGpu(onProgress: (message) {
+                              if (mounted) setState(() => _gpuStatus = message);
+                            });
+                            if (mounted) setState(() => _gpuStatus = result);
+                          });
+                          if (mounted) setState(() => _checkingGpu = false);
+                        },
+                  icon: const Icon(Icons.troubleshoot, size: 15),
+                  label: Text(_checkingGpu ? '正在测试硬件编码，请稍候' : '检测编码器与硬件支持')),
+              if (_gpuStatus.isNotEmpty)
+                Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SelectableText(_gpuStatus,
+                        style: TextStyle(fontSize: 12, color: c.primary))),
+              for (final family in GpuAcceleration.families)
+                if (settings.gpuEncoders
+                    .any((e) => e.startsWith('${family}_'))) ...[
+                  const SizedBox(height: 18),
+                  _gpuEncoderSelect(
+                    '${GpuAcceleration.labels[family]} 硬件编码器',
+                    settings.gpu.encoderFor(family),
+                    settings.gpuEncoders
+                        .where((e) => e.startsWith('${family}_'))
+                        .toList(),
+                    family,
+                  ),
+                ],
+              const SizedBox(height: 12),
+              Text(
+                  '格式转换、压缩与剪切会优先使用 GPU；AVI 无对应的硬件编码器，仍使用 CPU。专业工作台（高级模式）按你手动选择的编码器执行，不受此设置影响。',
+                  style: TextStyle(
+                      fontSize: 12, height: 1.6, color: c.onSurfaceVariant)),
             ]))
       else ...[
         const Text('通用', style: TextStyle(fontWeight: FontWeight.w600)),

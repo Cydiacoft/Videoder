@@ -10,17 +10,20 @@ class BrowserCookies {
     'vivaldi': 'Vivaldi',
     'safari': 'Safari（macOS）'
   };
-  static String? failureHelp(String output, Map<String, String> options) {
+  static String? failureHelp(String output, Map<String, String> options,
+      {int? failureKind}) {
     final text = output.toLowerCase();
     final browser = browsers[options['cookie-browser']] ?? '所选浏览器';
-    if (text.contains('could not copy chrome cookie database')) {
+    if (failureKind == 1 ||
+        text.contains('could not copy chrome cookie database')) {
       return '无法读取 $browser 的 Cookie 数据库，通常是浏览器仍在运行或文件访问受限。'
           '\n请先保存网页中的工作，完全退出浏览器；检查任务管理器中是否仍有浏览器后台进程，再重试。'
           '\nEdge 可在设置中关闭“启动增强”和“关闭后继续运行后台扩展和应用”，再退出。'
           '\n如果仍失败，请在 Firefox 登录同一网站后切换 Cookie 来源，或导入 cookies.txt 并选择“手动导入的 Cookie”。'
           '\n这一步尚未读取到登录状态，调整画质或 Aria2 参数无法解决。';
     }
-    if (text.contains('failed to decrypt') ||
+    if (failureKind == 2 ||
+        text.contains('failed to decrypt') ||
         text.contains('could not decrypt') ||
         text.contains('app-bound encryption')) {
       return '$browser 的 Cookie 解密失败。关闭浏览器不一定能解决加密兼容问题。'

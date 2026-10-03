@@ -209,6 +209,7 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
+				7D0C0DE00000000000000A01 /* Build Videoder Core */,
 			);
 			buildRules = (
 			);
@@ -308,6 +309,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "echo \"$PRODUCT_NAME.app\" > \"$PROJECT_DIR\"/Flutter/ephemeral/.app_filename && \"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh embed\n";
+		};
+		7D0C0DE00000000000000A01 /* Build Videoder Core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Videoder Core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nCORE_SRC=\"$PROJECT_DIR/../native/videoder_core\"\nCORE_BUILD=\"$PROJECT_DIR/../build/macos/videoder_core\"\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nif [ ! -d \"$CORE_SRC\" ]; then echo \"error: $CORE_SRC not found\" >&2; exit 1; fi\nif ! command -v cmake >/dev/null 2>&1; then echo \"error: cmake is required to build videoder_core (brew install cmake)\" >&2; exit 1; fi\ncmake -S \"$CORE_SRC\" -B \"$CORE_BUILD\" -DCMAKE_BUILD_TYPE=\"$CONFIGURATION\" -DVD_CORE_BUILD_TESTS=OFF\ncmake --build \"$CORE_BUILD\" --config \"$CONFIGURATION\"\nCORE_LIB=\"$CORE_BUILD/libvideoder_core.dylib\"\nif [ ! -f \"$CORE_LIB\" ]; then CORE_LIB=\"$CORE_BUILD/$CONFIGURATION/libvideoder_core.dylib\"; fi\nif [ ! -f \"$CORE_LIB\" ]; then echo \"error: libvideoder_core.dylib was not produced in $CORE_BUILD\" >&2; exit 1; fi\nmkdir -p \"$DEST\"\ncp \"$CORE_LIB\" \"$DEST/libvideoder_core.dylib\"\nif [ \"$CODE_SIGNING_ALLOWED\" != \"NO\" ]; then IDENTITY=\"$EXPANDED_CODE_SIGN_IDENTITY\"; if [ -z \"$IDENTITY\" ]; then IDENTITY=\"-\"; fi; codesign --force --sign \"$IDENTITY\" \"$DEST/libvideoder_core.dylib\"; fi\necho \"embedded libvideoder_core.dylib into $DEST\"\n";
 		};
 		33CC111E2044C6BF0003C045 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;

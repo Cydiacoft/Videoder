@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core_bridge/native_event.dart';
+import 'core_bridge/videoder_core.dart';
 import 'extensions/registry.dart';
 import 'extensions/toolbox_extension.dart';
 import 'pages/settings_page.dart';
@@ -12,7 +14,24 @@ import 'providers/app_provider.dart';
 import 'services/media_command.dart';
 import 'theme/studio_theme.dart';
 
+/// Attaches to the native core before the first frame.
+///
+/// Phase 1 only reports availability: a missing or incompatible
+/// `videoder_core` library is visible in the log immediately instead of
+/// surfacing at the first task. Features move onto this instance from Phase 2
+/// onwards; nothing in the UI depends on it yet.
+void _attachNativeCore() {
+  final core = videoderCore;
+  if (core == null) {
+    debugPrint('videoder_core unavailable: $videoderCoreFailure');
+    return;
+  }
+  debugPrint('videoder_core ${core.version} (ABI ${core.abiVersion}) ready');
+  core.log(NativeLogLevel.info, 'Flutter host attached');
+}
+
 void main() {
+  _attachNativeCore();
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(
         ['Videoader'], await rootBundle.loadString('LICENSE'));

@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../providers/media_provider.dart';
 import '../services/media_command.dart';
+import '../services/gpu_acceleration.dart';
 import '../theme/studio_theme.dart';
 
 class ToolboxPage extends ConsumerStatefulWidget {
@@ -23,6 +24,7 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
   String? _directory;
   int? _bytes;
   String _videoFormat = 'mp4';
+  String _videoCodec = 'auto';
   String _audioFormat = 'mp3';
   double _crf = 28;
   bool _logExpanded = false;
@@ -218,6 +220,12 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
             : 'mp4';
     final formats = audioOutput ? MediaFormat.audio : MediaFormat.video;
     final selected = formats.firstWhere((item) => item.extension == format);
+    final codecs = MediaCommand.videoCodecs(format);
+    final codecChoice = codecs.contains(_videoCodec) ? _videoCodec : 'auto';
+    final codec =
+        audioOutput ? null : MediaCommand.codecForFormat(format, codecChoice);
+    final gpuEncoder =
+        settings.gpuAcceleration ? settings.gpu.encoderFor(codec ?? '') : null;
     final configured = settings.ffmpegPath?.isNotEmpty == true;
     final desktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     return StudioPanel(
@@ -295,6 +303,29 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
             style: TextStyle(
                 fontSize: 12, height: 1.6, color: c.onSurfaceVariant)),
       ],
+      if (!audioOutput && codecs.length > 1) ...[
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          key: ValueKey('video-codec:$format:$codecChoice'),
+          initialValue: codecChoice,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: '视频编码'),
+          items: [
+            const DropdownMenuItem(value: 'auto', child: Text('默认（兼容优先）')),
+            for (final family in codecs)
+              DropdownMenuItem(
+                  value: family,
+                  child: Text(GpuAcceleration.labels[family] ?? family)),
+          ],
+          onChanged: job.running
+              ? null
+              : (value) => setState(() => _videoCodec = value!),
+        ),
+        const SizedBox(height: 8),
+        Text('HEVC、AV1 需要播放器支持；无对应 GPU 编码器时使用 CPU，AV1 软件编码可能较慢。',
+            style: TextStyle(
+                fontSize: 12, height: 1.6, color: c.onSurfaceVariant)),
+      ],
       if (audioOutput && ['mp3', 'm4a'].contains(format)) ...[
         const SizedBox(height: 16),
         DropdownButtonFormField<int>(
@@ -318,7 +349,7 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
                   const TextStyle(fontSize: 34, fontWeight: FontWeight.w600)),
           const Padding(
               padding: EdgeInsets.only(left: 7, bottom: 7),
-              child: Text('CRF', style: TextStyle(fontSize: 12)))
+              child: Text('质量值', style: TextStyle(fontSize: 12)))
         ]),
         Slider(
             value: _crf,
@@ -362,7 +393,13 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
       const SizedBox(height: 17),
       const Divider(),
       const SizedBox(height: 17),
-      _detail('视频编码', selected.videoLabel),
+      _detail('视频编码', GpuAcceleration.labels[codec] ?? selected.videoLabel),
+      if (!audioOutput)
+        _detail(
+            '处理方式',
+            gpuEncoder == null
+                ? 'CPU 编码'
+                : GpuAcceleration.vendorLabel(gpuEncoder)),
       _detail(
           '音频编码',
           audioOutput && ['mp3', 'm4a'].contains(format)
@@ -412,10 +449,12 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
                   input: _input,
                   directory: directory,
                   format: format,
+                  videoCodec: codecChoice,
                   audioBitrate: _audioBitrate,
                   crf: _crf.round(),
                   start: _start.text,
-                  end: _end.text),
+                  end: _end.text,
+                  gpu: settings.gpuAcceleration ? settings.gpu : null),
           icon: const Icon(Icons.play_arrow_rounded, size: 17),
           label: const Text('开始处理')),
       if (job.running)

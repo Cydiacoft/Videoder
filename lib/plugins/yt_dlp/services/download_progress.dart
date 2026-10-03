@@ -8,6 +8,37 @@ class DownloadProgress {
   const DownloadProgress(
       {this.stage = '正在解析链接', this.fraction, this.speed = '', this.eta = ''});
 
+  /// Localized UI text stays here; the native parser only reports values and
+  /// stage codes shared by yt-dlp and aria2c.
+  static DownloadProgress fromNative(Map<String, dynamic> data) {
+    final stage = switch (data['stage'] as int) {
+      1 => '当前流已下载，等待后续处理',
+      2 => '正在下载（Aria2 当前流）',
+      3 => '正在合并音视频',
+      4 => '正在提取 / 转换音频',
+      5 => '正在转码 / 封装',
+      6 => '正在后处理',
+      7 => '正在下载播放列表（第 ${data['playlist_index']}/${data['playlist_total']} 项）',
+      _ => '正在下载（当前流）',
+    };
+    final speed = data['speed_bytes_per_second'] as num?;
+    final eta = data['eta_seconds'] as num?;
+    return DownloadProgress(
+      stage: stage,
+      fraction: (data['fraction'] as num?)?.toDouble(),
+      speed: data['stage'] == 2
+          ? data['aria_speed'] as String? ?? ''
+          : speed != null && speed > 0
+              ? '${(speed / 1048576).toStringAsFixed(2)} MiB/s'
+              : '',
+      eta: data['stage'] == 2
+          ? data['aria_eta'] as String? ?? ''
+          : eta != null && eta >= 0
+              ? '${eta.ceil()} 秒'
+              : '',
+    );
+  }
+
   static const marker = '__VIDEOADER_PROGRESS__:';
   static const postMarker = '__VIDEOADER_POST__:';
   static const arguments = [

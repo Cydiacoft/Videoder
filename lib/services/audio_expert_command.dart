@@ -1,3 +1,6 @@
+import '../core_bridge/native_bindings.dart';
+import '../core_bridge/native_error.dart';
+import '../core_bridge/videoder_core.dart';
 import 'media_command.dart';
 
 enum AudioPreset { convert, trim, merge, normalize }
@@ -13,7 +16,75 @@ extension AudioPresetInfo on AudioPreset {
 }
 
 class AudioExpertCommand {
+  /// Translates a rejection reason from the core into the message the wizard
+  /// has always shown.
+  static FormatException _rejected(
+      NativeCommandRejected rejection, String format) {
+    final message = switch (rejection.status) {
+      NativeAudioExpertCommandStatus.inputRequired => '请先添加素材',
+      NativeAudioExpertCommandStatus.outputRequired => '请选择不同于输入的输出文件',
+      NativeAudioExpertCommandStatus.mergeInputCount => '合并至少需要两个素材',
+      NativeAudioExpertCommandStatus.singleInputRequired => '此操作只需要一个素材',
+      NativeAudioExpertCommandStatus.unsupportedFormat => '不支持的音频格式',
+      NativeAudioExpertCommandStatus.outputExtension =>
+        '输出文件后缀应为 .$format，请重新选择保存位置',
+      NativeAudioExpertCommandStatus.unsupportedRateOrChannels =>
+        '请选择支持的采样率与声道',
+      NativeAudioExpertCommandStatus.unsupportedBitrate => '请选择支持的音频码率',
+      NativeAudioExpertCommandStatus.mp3SampleRate => 'MP3 支持的采样率上限为 48 kHz',
+      NativeAudioExpertCommandStatus.invalidTimeSyntax =>
+        '时间格式应为秒数或 HH:MM:SS',
+      NativeAudioExpertCommandStatus.invalidTimeValue =>
+        '请输入有效时间，例如 00:01:30 或 90.5',
+      NativeAudioExpertCommandStatus.invalidTimeRange => '结束时间必须晚于开始时间',
+      _ => '无法生成处理参数：${rejection.nativeMessage ?? rejection.status}',
+    };
+    return FormatException(message);
+  }
+
   static List<String> build(
+      {required AudioPreset preset,
+      required List<String> inputs,
+      required String output,
+      String format = 'mp3',
+      int bitrate = 192,
+      int sampleRate = 48000,
+      int channels = 2,
+      String start = '0',
+      String end = '10'}) {
+    final core = videoderCore;
+    if (core != null) {
+      try {
+        return core.buildAudioExpertArguments(
+          preset: preset.index,
+          inputs: inputs,
+          output: output,
+          format: format,
+          bitrate: bitrate,
+          sampleRate: sampleRate,
+          channels: channels,
+          start: start,
+          end: end,
+        );
+      } on NativeCommandRejected catch (rejection) {
+        throw _rejected(rejection, format);
+      } on VideoderCoreException {
+        // Fall through to the Dart implementation.
+      }
+    }
+    return buildLocally(
+        preset: preset,
+        inputs: inputs,
+        output: output,
+        format: format,
+        bitrate: bitrate,
+        sampleRate: sampleRate,
+        channels: channels,
+        start: start,
+        end: end);
+  }
+
+  static List<String> buildLocally(
       {required AudioPreset preset,
       required List<String> inputs,
       required String output,

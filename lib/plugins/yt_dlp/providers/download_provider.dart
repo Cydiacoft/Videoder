@@ -14,6 +14,7 @@ import '../services/browser_cookies.dart';
 import '../services/video_download.dart';
 import '../../../services/tool_process.dart';
 import '../../../providers/app_provider.dart' as core;
+import '../../../core_bridge/videoder_core.dart' as native;
 
 enum DownloadFormat {
   video,
@@ -741,45 +742,69 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     try {
       final args = await _buildArgs(settings, url, logs);
+      final executable = resolveExecutable(settings.ytDlpPath!, 'yt-dlp');
+      int exitCode;
+      String fullOutput;
+      List<String>? nativePaths;
+      String? nativeError;
+      int? nativeFailureKind;
+      String? nativeTaskState;
 
-      final process = await Process.start(
-        resolveExecutable(settings.ytDlpPath!, 'yt-dlp'),
-        args,
-      );
-
-      final stdoutBuffer = StringBuffer();
-      final stderrBuffer = StringBuffer();
-
-      void consume(String line, StringBuffer buffer) {
-        final progress = DownloadProgress.parse(line);
-        if (progress != null) {
-          if (progress.stage != state.progress.stage) {
-            logs.addInfo(progress.stage);
-          }
-          state = state.copyWith(
-              progress: progress, currentTaskIndex: state.currentTaskIndex);
-        } else {
-          buffer.writeln(line);
-          if (line.trim().isNotEmpty &&
-              !line.startsWith(VideoDownload.marker)) {
-            logs.add(line);
-          }
+      void reportProgress(DownloadProgress progress) {
+        if (progress.stage != state.progress.stage) {
+          logs.addInfo(progress.stage);
         }
+        state = state.copyWith(
+            progress: progress, currentTaskIndex: state.currentTaskIndex);
       }
 
-      final stdoutDone = process.stdout
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .transform(const LineSplitter())
-          .forEach((line) => consume(line, stdoutBuffer));
-      final stderrDone = process.stderr
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .transform(const LineSplitter())
-          .forEach((line) => consume(line, stderrBuffer));
+      final bridge = native.videoderCore;
+      if (bridge != null) {
+        final result = await bridge.runDownloadTask(
+          executable: executable,
+          arguments: args,
+          verifyVideo: settings.format == DownloadFormat.video,
+          onProgress: (detail) =>
+              reportProgress(DownloadProgress.fromNative(detail)),
+          onLog: (_, line) {
+            if (line.trim().isNotEmpty) logs.add(line);
+          },
+        );
+        exitCode = result['exit_code'] as int;
+        nativePaths = (result['output_paths'] as List).cast<String>();
+        fullOutput = result['error_excerpt'] as String? ?? '';
+        nativeError = result['error'] as String?;
+        nativeFailureKind = result['failure_kind'] as int?;
+        nativeTaskState = result['task_state'] as String?;
+      } else {
+        final process = await Process.start(executable, args);
+        final stdoutBuffer = StringBuffer();
+        final stderrBuffer = StringBuffer();
+        void consume(String line, StringBuffer buffer) {
+          final progress = DownloadProgress.parse(line);
+          if (progress != null) {
+            reportProgress(progress);
+          } else {
+            buffer.writeln(line);
+            if (line.trim().isNotEmpty &&
+                !line.startsWith(VideoDownload.marker)) {
+              logs.add(line);
+            }
+          }
+        }
 
-      final exitCode = await process.exitCode;
-      await Future.wait([stdoutDone, stderrDone]);
-
-      final fullOutput = stdoutBuffer.toString() + stderrBuffer.toString();
+        final stdoutDone = process.stdout
+            .transform(const Utf8Decoder(allowMalformed: true))
+            .transform(const LineSplitter())
+            .forEach((line) => consume(line, stdoutBuffer));
+        final stderrDone = process.stderr
+            .transform(const Utf8Decoder(allowMalformed: true))
+            .transform(const LineSplitter())
+            .forEach((line) => consume(line, stderrBuffer));
+        exitCode = await process.exitCode;
+        await Future.wait([stdoutDone, stderrDone]);
+        fullOutput = stdoutBuffer.toString() + stderrBuffer.toString();
+      }
 
       if (exitCode != 0) {
         final errorMatch =
@@ -790,15 +815,21 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         }
       }
 
-      var downloadSucceeded = exitCode == 0;
+      var downloadSucceeded = nativeTaskState == null
+          ? exitCode == 0
+          : nativeTaskState == 'completed';
       String? errorMessage;
 
       if (exitCode != 0) {
-        final cookieHelp =
-            BrowserCookies.failureHelp(fullOutput, settings.options);
-        errorMessage = cookieHelp ?? 'Exit code: $exitCode';
+        final cookieHelp = BrowserCookies.failureHelp(
+            fullOutput, settings.options,
+            failureKind: nativeFailureKind);
+        errorMessage = cookieHelp ??
+            (nativeError?.isNotEmpty == true
+                ? nativeError
+                : 'Exit code: $exitCode');
         if (cookieHelp != null) logs.addWarning(cookieHelp);
-        if (fullOutput.contains('412')) {
+        if (nativeFailureKind == 3 || fullOutput.contains('412')) {
           logs.addWarning(
               '站点返回 HTTP 412：请更新 yt-dlp，检查对应站点 Cookie 是否有效，稍后再试。更换下载器无法解决元数据请求被拒绝的问题。');
         }
@@ -807,7 +838,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       var skipped = false;
       if (downloadSucceeded && settings.format == DownloadFormat.video) {
         try {
-          final paths = VideoDownload.outputPaths(stdoutBuffer.toString());
+          final paths = nativePaths ?? VideoDownload.outputPaths(fullOutput);
           if (paths.isEmpty) {
             skipped = true;
             logs.addInfo('未产生最终视频文件，任务可能被下载记录或自定义参数跳过；未标记为下载完成。');
@@ -920,6 +951,34 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     if (cookiePath != null) {
       args.addAll(['--cookies', cookiePath]);
       logs.addInfo('已应用匹配站点的 Cookie');
+    }
+
+    final bridge = native.videoderCore;
+    if (bridge != null) {
+      final height = switch (settings.quality) {
+        VideoQuality.best => 0,
+        VideoQuality.p2160 => 2160,
+        VideoQuality.p1440 => 1440,
+        VideoQuality.p1080 => 1080,
+        VideoQuality.p720 => 720,
+        VideoQuality.p480 => 480,
+        VideoQuality.p360 => 360,
+      };
+      logs.addInfo(
+          '格式: ${settings.format.name}, 画质: ${settings.quality.name}, 模式: ${settings.downloadMode.displayName}');
+      return bridge.buildDownloadArguments(
+        ffmpegPath: settings.ffmpegPath!,
+        downloadPath: settings.downloadPath!,
+        url: url,
+        format: settings.format.index,
+        height: height,
+        options: settings.options,
+        aria2Path: settings.downloadMode == DownloadMode.aria2 &&
+                settings.isAria2Configured
+            ? settings.aria2Path!
+            : '',
+        cookiePath: cookiePath ?? '',
+      );
     }
 
     switch (settings.format) {

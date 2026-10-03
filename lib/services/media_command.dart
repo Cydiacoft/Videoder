@@ -1,3 +1,8 @@
+import '../core_bridge/native_bindings.dart';
+import '../core_bridge/native_error.dart';
+import '../core_bridge/videoder_core.dart';
+import 'gpu_acceleration.dart';
+
 enum MediaOperation { convert, audio, compress, trim }
 
 extension MediaOperationLabel on MediaOperation {
@@ -30,6 +35,62 @@ class MediaFormat {
 }
 
 class MediaCommand {
+  /// Video codec families for a container, in preference order.
+  ///
+  /// Served by the core when it is available so the matrix exists in one place;
+  /// the local table remains as the compatibility path.
+  static List<String> videoCodecs(String format) {
+    final core = videoderCore;
+    if (core != null) {
+      try {
+        return core.videoCodecsForFormat(format);
+      } on VideoderCoreException {
+        // Fall through to the local table: an unusable core must not break the
+        // toolbox.
+      }
+    }
+    return switch (format) {
+      'mp4' || 'mkv' => ['h264', 'hevc', 'av1'],
+      'mov' || 'ts' => ['h264', 'hevc'],
+      'webm' => ['vp9', 'av1'],
+      'avi' => ['mpeg4'],
+      'flv' => ['h264'],
+      _ => [],
+    };
+  }
+
+  /// Translates a rejection reason from the core into the message the UI has
+  /// always shown.
+  static FormatException _rejected(NativeCommandRejected rejection,
+      String format) {
+    final message = switch (rejection.status) {
+      NativeMediaCommandStatus.path => '输入和输出必须是不同的文件',
+      NativeMediaCommandStatus.unsupportedContainer => '不支持的输出格式',
+      NativeMediaCommandStatus.unsupportedVideoFormat => '不支持的视频格式',
+      NativeMediaCommandStatus.codecNotInContainer =>
+        '$format 不支持所选视频编码，请更换编码或容器',
+      NativeMediaCommandStatus.invalidTimeSyntax => '时间格式应为秒数或 HH:MM:SS',
+      NativeMediaCommandStatus.invalidTimeValue =>
+        '请输入有效时间，例如 00:01:30 或 90.5',
+      NativeMediaCommandStatus.invalidTimeRange => '结束时间必须晚于开始时间',
+      NativeMediaCommandStatus.invalidAudioBitrate =>
+        '音频码率应为 128、192、256 或 320 kbps',
+      NativeMediaCommandStatus.invalidQuality => '压缩质量应在 18–35 之间',
+      _ => '无法生成处理参数：${rejection.nativeMessage ?? rejection.status}',
+    };
+    return FormatException(message);
+  }
+
+  static String codecForFormat(String format, String requested) {
+    final supported = videoCodecs(format);
+    if (supported.isEmpty) throw const FormatException('不支持的视频格式');
+    if (requested == 'auto') return supported.first;
+    if (!supported.contains(requested)) {
+      throw FormatException('$format 不支持所选视频编码，请更换编码或容器');
+    }
+    return requested;
+  }
+
   static double parseTime(String value) {
     final parts = value.trim().split(':');
     if (parts.isEmpty || parts.length > 3) {
@@ -55,11 +116,46 @@ class MediaCommand {
     required String input,
     required String output,
     String format = 'mp4',
+    String videoCodec = 'auto',
     int crf = 28,
     int audioBitrate = 192,
     String start = '0',
     String end = '10',
+    GpuAcceleration? gpu,
   }) {
+    // Preferred path: the core builds the argument list, so the ordering and the
+    // validation outcomes live in one place and are covered by the native suite.
+    final core = videoderCore;
+    if (core != null) {
+      try {
+        return core.buildMediaArguments(
+          operation: switch (operation) {
+            MediaOperation.convert => NativeMediaOperation.convert,
+            MediaOperation.audio => NativeMediaOperation.audio,
+            MediaOperation.compress => NativeMediaOperation.compress,
+            MediaOperation.trim => NativeMediaOperation.trim,
+          },
+          inputPath: input,
+          outputPath: output,
+          format: format,
+          videoCodec: videoCodec,
+          crf: crf,
+          audioBitrate: audioBitrate,
+          start: start,
+          end: end,
+          gpuH264: gpu?.h264,
+          gpuHevc: gpu?.hevc,
+          gpuAv1: gpu?.av1,
+          gpuVp9: gpu?.vp9,
+        );
+      } on NativeCommandRejected catch (rejection) {
+        throw _rejected(rejection, format);
+      } on VideoderCoreException {
+        // Fall through to the Dart implementation below rather than failing the
+        // operation because of a bridge problem.
+      }
+    }
+
     if (input.isEmpty || output.isEmpty || input == output) {
       throw const FormatException('输入和输出必须是不同的文件');
     }
@@ -71,14 +167,25 @@ class MediaCommand {
     if (!supported.any((item) => item.extension == format)) {
       throw const FormatException('不支持的输出格式');
     }
-    final args = ['-hide_banner', '-nostdin', '-n', '-i', input];
+    final isAudio = MediaFormat.audio.any((item) => item.extension == format);
+    final codec = isAudio ? null : codecForFormat(format, videoCodec);
+    final encoder = gpu?.encoderFor(codec ?? '');
+    final vaapi = encoder?.endsWith('_vaapi') == true;
+    final args = ['-hide_banner', '-nostdin', '-n'];
+    if (vaapi) {
+      args.addAll(['-init_hw_device', 'vaapi=gpu', '-filter_hw_device', 'gpu']);
+    }
+    double? duration;
     if (operation == MediaOperation.trim) {
       final from = parseTime(start);
       final to = parseTime(end);
       if (to <= from) throw const FormatException('结束时间必须晚于开始时间');
-      args.addAll(['-ss', '$from', '-t', '${to - from}']);
+      args.addAll(['-ss', '$from']);
+      duration = to - from;
     }
-    if (MediaFormat.audio.any((item) => item.extension == format)) {
+    args.addAll(['-i', input]);
+    if (duration != null) args.addAll(['-t', '$duration']);
+    if (isAudio) {
       if (![128, 192, 256, 320].contains(audioBitrate)) {
         throw const FormatException('音频码率应为 128、192、256 或 320 kbps');
       }
@@ -97,52 +204,60 @@ class MediaCommand {
         '-map',
         '0:a:0?',
         '-vf',
-        'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+        'pad=ceil(iw/2)*2:ceil(ih/2)*2${vaapi ? ',format=nv12,hwupload' : ''}',
         '-pix_fmt',
-        'yuv420p',
+        vaapi ? 'vaapi' : 'yuv420p',
       ]);
-      switch (format) {
-        case 'webm':
-          args.addAll([
-            '-c:v',
-            'libvpx-vp9',
-            '-crf',
-            '30',
-            '-b:v',
-            '0',
-            '-deadline',
-            'good',
-            '-cpu-used',
-            '2',
-            '-c:a',
-            'libopus',
-            '-b:a',
-            '128k'
-          ]);
-        case 'avi':
-          args.addAll([
-            '-c:v',
-            'mpeg4',
-            '-q:v',
-            '3',
-            '-c:a',
-            'libmp3lame',
-            '-b:a',
-            '192k'
-          ]);
-        default:
-          args.addAll([
-            '-c:v',
-            'libx264',
-            '-preset',
-            'medium',
-            '-crf',
-            operation == MediaOperation.compress ? '$crf' : '23',
-            '-c:a',
-            'aac',
-            '-b:a',
-            '192k'
-          ]);
+      final quality = operation == MediaOperation.compress
+          ? crf
+          : (codec == 'av1' || codec == 'vp9' ? 30 : 23);
+      if (encoder != null) {
+        args.addAll(['-c:v', encoder, ...gpu!.qualityArgs(encoder, quality)]);
+      } else {
+        args.addAll(switch (codec) {
+          'hevc' => [
+              '-c:v',
+              'libx265',
+              '-preset',
+              'medium',
+              '-crf',
+              '$quality'
+            ],
+          'av1' => [
+              '-c:v',
+              'libaom-av1',
+              '-crf',
+              '$quality',
+              '-b:v',
+              '0',
+              '-cpu-used',
+              '6',
+              '-row-mt',
+              '1'
+            ],
+          'vp9' => [
+              '-c:v',
+              'libvpx-vp9',
+              '-crf',
+              '$quality',
+              '-b:v',
+              '0',
+              '-deadline',
+              'good',
+              '-cpu-used',
+              '2'
+            ],
+          'mpeg4' => ['-c:v', 'mpeg4', '-q:v', '3'],
+          _ => ['-c:v', 'libx264', '-preset', 'medium', '-crf', '$quality'],
+        });
+      }
+      args.addAll(switch (format) {
+        'webm' => ['-c:a', 'libopus', '-b:a', '128k'],
+        'avi' => ['-c:a', 'libmp3lame', '-b:a', '192k'],
+        _ => ['-c:a', 'aac', '-b:a', '192k'],
+      });
+      if (codec == 'hevc' && (format == 'mp4' || format == 'mov')) {
+        args.addAll(['-tag:v', 'hvc1']);
       }
       if (format == 'mp4' || format == 'mov') {
         args.addAll(['-movflags', '+faststart']);
