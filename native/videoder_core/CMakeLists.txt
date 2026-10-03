@@ -91,6 +91,7 @@ target_compile_definitions(videoder_core_objects
     $<$<CXX_COMPILER_ID:MSVC>:_HAS_EXCEPTIONS=1>
 )
 set_target_properties(videoder_core_objects PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
   CXX_VISIBILITY_PRESET hidden
   VISIBILITY_INLINES_HIDDEN ON
 )
