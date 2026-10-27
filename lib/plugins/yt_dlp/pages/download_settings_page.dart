@@ -334,7 +334,9 @@ class _DownloadSettingsPageState extends ConsumerState<DownloadSettingsPage> {
                                   if (dialogContext.mounted) {
                                     update(() {
                                       saving = false;
-                                      error = '$e';
+                                      error = e is FormatException
+                                          ? e.message
+                                          : '$e';
                                     });
                                   }
                                 }

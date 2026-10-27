@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../providers/media_provider.dart';
 import '../services/media_command.dart';
+import '../services/output_summary.dart';
 import '../services/gpu_acceleration.dart';
 import '../theme/studio_theme.dart';
 
@@ -186,8 +187,24 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
               Icon(Icons.check_circle_outline, color: c.primary, size: 20),
               const SizedBox(width: 10),
               Expanded(
-                  child: Text(p.basename(job.output!),
-                      style: const TextStyle(fontSize: 12))),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(p.basename(job.output!),
+                        style: const TextStyle(fontSize: 12)),
+                    if (job.outputBytes != null || job.elapsed != null) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                          [
+                            if (job.outputBytes != null)
+                              outputSize(job.outputBytes!),
+                            if (job.elapsed != null)
+                              '耗时 ${outputTime(job.elapsed!)}'
+                          ].join(' · '),
+                          style: TextStyle(
+                              fontSize: 11, color: c.onSurfaceVariant)),
+                    ],
+                  ])),
               TextButton(
                   onPressed: () async {
                     try {

@@ -1,0 +1,13 @@
+{
+  "manifestVersion": 1, "protocolVersion": 1, "hostApiVersion": 1,
+  "id": "yt-dlp", "name": "yt-dlp 网络下载", "publisher": "Videoder",
+  "version": "1.1.0", "platform": "windows-x64", "entrypoint": "bin/plugin.exe",
+  "renderer": "yt-dlp", "description": "网络视频下载、批量链接、画质选择、Aria2 加速与 Cookie 管理。",
+  "permissions": ["访问互联网", "读写下载目录", "读取用户选择的 Cookie 和浏览器登录信息", "运行 yt-dlp、FFmpeg 和可选 Aria2"],
+  "fields": [], "settings": [],
+  "dependencies": [
+    {"id":"yt-dlp", "name":"yt-dlp", "kind":"executable", "executable":"yt-dlp", "preference":"yt_dlp_path", "required":true, "automatic":true, "instructionsUrl":"https://github.com/yt-dlp/yt-dlp/releases"},
+    {"id":"ffmpeg", "name":"FFmpeg", "kind":"executable", "executable":"ffmpeg", "preference":"ffmpeg_path", "required":true, "instructionsUrl":"https://ffmpeg.org/download.html"},
+    {"id":"aria2", "name":"Aria2（可选）", "kind":"executable", "executable":"aria2c", "preference":"aria2_path", "required":false, "instructionsUrl":"https://github.com/aria2/aria2/releases"}
+  ]
+}

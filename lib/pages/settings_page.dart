@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
 import '../extensions/registry.dart';
 import '../extensions/toolbox_extension.dart';
+import '../extensions/plugin_center_page.dart';
 import '../services/gpu_acceleration.dart';
 import '../theme/studio_theme.dart';
 
@@ -278,7 +279,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         const Text('扩展', style: TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
         _group([
-          for (final extension in bundledExtensions)
+          ListTile(
+              leading: const Icon(Icons.apps_outlined),
+              title: const Text('扩展中心'),
+              subtitle: const Text('发现、安装、更新和管理扩展'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => const PluginCenterPage()))),
+          for (final extension in ref.watch(availableExtensionsProvider))
             ListTile(
                 leading: const Icon(Icons.extension_outlined),
                 title: Text(extension.name),

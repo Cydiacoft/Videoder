@@ -1122,6 +1122,9 @@ class NativeBindings {
   late final _HardwareCancelDart _hardwareCancel;
   late final _BuildMediaArgsDart _buildMediaArgs;
   late final _BuildImageArgsDart _buildImageArgs;
+  late final _BuildImageArgsDart _buildUtilityArgs =
+      library.lookupFunction<_BuildImageArgsNative, _BuildImageArgsDart>(
+          'vd_utility_build_args');
   late final _DownloadBuildDart _downloadBuild;
   late final _DownloadProgressDart _downloadProgress;
   late final _DownloadTaskStartDart _downloadTaskStart;
@@ -1373,6 +1376,10 @@ class NativeBindings {
   int buildImageArguments(Pointer<VDCoreHandle> handle,
           Pointer<Utf8> requestJson, Pointer<VDStringArrayStruct> outArgs) =>
       _buildImageArgs(handle, requestJson, outArgs);
+
+  int buildUtilityArguments(Pointer<VDCoreHandle> handle,
+          Pointer<Utf8> requestJson, Pointer<VDStringArrayStruct> outArgs) =>
+      _buildUtilityArgs(handle, requestJson, outArgs);
 
   String? parseDownloadProgress(Pointer<VDCoreHandle> handle, String line) {
     final nativeLine = line.toNativeUtf8();

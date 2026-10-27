@@ -1,0 +1,13 @@
+{
+  "manifestVersion":1, "protocolVersion":1, "hostApiVersion":1,
+  "id":"tiktok-downloader", "name":"TikTokDownloader 抖音 / TikTok", "publisher":"Videoder",
+  "version":"1.1.0", "platform":"windows-x64", "entrypoint":"bin/plugin.exe",
+  "renderer":"tiktok-downloader", "description":"通过 TikTokDownloader Web API 下载视频与普通图集。",
+  "permissions":["连接用户配置的 TikTokDownloader API", "访问媒体下载地址", "读写下载目录"],
+  "fields":[{"id":"links", "label":"作品链接", "type":"multiline", "required":true}],
+  "settings":[
+    {"id":"api", "label":"API 地址", "type":"text", "default":"http://127.0.0.1:5555"},
+    {"id":"token", "label":"API Token", "type":"secret", "default":""}
+  ],
+  "dependencies":[{"id":"tiktok-api", "name":"TikTokDownloader API", "kind":"api", "preference":"tiktok_downloader_api", "required":true, "default":"http://127.0.0.1:5555", "instructionsUrl":"https://github.com/JoeanAmier/TikTokDownloader"}]
+}

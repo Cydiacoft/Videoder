@@ -19,6 +19,41 @@ void main() {
               'Cookie: session=abc==; uid=123', 'https://www.example.com/path'),
           contains('session\tabc=='));
     });
+    test('normalizes space-separated Netscape cookies from browser exports',
+        () {
+      const row = '.douyin.com TRUE / TRUE 1825923983 UIFID 42e6e93a470f';
+      final text = CookieCodec.encode(
+          '# Netscape HTTP Cookie File\n# Exported by Cookie-Editor\n$row\n',
+          'www.douyin.com');
+      expect(
+          text,
+          contains(
+              '.douyin.com\tTRUE\t/\tTRUE\t1825923983\tUIFID\t42e6e93a470f'));
+      final mixed = CookieCodec.encode(
+          '# Netscape HTTP Cookie File\r\n'
+          '.douyin.com\tTRUE /\tTRUE 1825923983\tUIFID 42e6e93a470f\r\n',
+          'douyin.com');
+      expect(mixed, contains(
+          '.douyin.com\tTRUE\t/\tTRUE\t1825923983\tUIFID\t42e6e93a470f'));
+    });
+    test('reports the invalid line without exposing Cookie values', () {
+      expect(
+          () => CookieCodec.encode(
+              '# Netscape HTTP Cookie File\n.douyin.com\tTRUE\t/\tTRUE\tbad\tUIFID\tsecret',
+              'douyin.com'),
+          throwsA(isA<FormatException>()
+              .having((e) => e.message, 'message', contains('第 2 行'))
+              .having((e) => e.message, 'message', isNot(contains('secret')))));
+    });
+    test('ignores a nameless exporter row and keeps valid cookies', () {
+      final text = CookieCodec.encode(
+          '# Netscape HTTP Cookie File\n'
+          '.douyin.com\tTRUE\t/\tTRUE\t1825923983\t\tplaceholder\n'
+          '.douyin.com\tTRUE\t/\tTRUE\t1825923983\tUIFID\tvalid',
+          'douyin.com');
+      expect(text, contains('\tUIFID\tvalid'));
+      expect(text, isNot(contains('placeholder')));
+    });
     test('rejects empty, malformed file and domain', () {
       for (final value in [
         '',

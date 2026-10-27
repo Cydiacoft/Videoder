@@ -106,8 +106,12 @@ Status ProbeJob::Run(const ProbeRequest& request, MediaInfo& out) {
   }
   if (!LooksLikeRemoteInput(request.input_path)) {
     std::error_code error;
+    // Paths from the Dart bridge are UTF-8. On Windows, path(std::string)
+    // interprets them using the active ANSI code page and misses Unicode files.
+    const std::u8string utf8_path(request.input_path.begin(),
+                                  request.input_path.end());
     const bool exists =
-        std::filesystem::exists(std::filesystem::path(request.input_path), error);
+        std::filesystem::exists(std::filesystem::path(utf8_path), error);
     if (error || !exists) {
       return Status::Error(VD_ERROR_NOT_FOUND,
                            "input file does not exist: " + request.input_path);

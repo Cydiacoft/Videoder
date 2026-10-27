@@ -30,6 +30,11 @@ class BrowserCookies {
           '\n请更新 yt-dlp 后重试；也可在 Firefox 登录同一网站后切换 Cookie 来源，或手动导入 cookies.txt。'
           '\n使用导入文件时，必须将 Cookie 来源改为“手动导入的 Cookie”并应用。';
     }
+    if (text.contains('[douyin]') &&
+        text.contains('fresh cookies (not necessarily logged in) are needed')) {
+      return '抖音的视频详情请求被拒绝。请先更新 yt-dlp，在浏览器中打开该视频，再到“下载与 Cookie → Cookie 管理”选择当前浏览器并应用 Cookie 来源；也可以导入新导出的抖音 cookies.txt。'
+          '\n即使 Cookie 有效，抖音接口也可能返回空数据；若更新和更换 Cookie 后仍失败，请保存日志并向 yt-dlp 报告。切换 Aria2 或画质无法解决详情请求失败。';
+    }
     return null;
   }
 

@@ -784,8 +784,20 @@ VD_CORE_API int32_t vd_ffmpeg_build_media_args(
 /* Validates an image edit, video cover or frame request and builds FFmpeg
  * arguments. request_json is a UTF-8 object with operation, input_path,
  * output_path, format, time_seconds and optional crop/scale/rotation fields.
+ * preview_max_width (0..1280) limits both preview dimensions after filters;
+ * zero leaves normal export dimensions unchanged.
  * Output strings use the same per-handle scratch lifetime as other builders. */
 VD_CORE_API VDError vd_image_build_args(VDCoreHandle* handle,
+                                       const char* request_json,
+                                       VDStringArray* out_args);
+
+/* JSON utility builder: mute, mirror, watermark, subtitles, denoise or volume.
+ * Requires operation/input_path/output_path. Optional fields: watermark_path,
+ * watermark_width (16..2048), position (corner), subtitle_index (0..99),
+ * volume (0..4). mirror/watermark accept preview=true and preview_time seconds
+ * to export a PNG frame bounded to 960 pixels. Other outputs are unchanged.
+ * Returns per-handle scratch strings like other builders. */
+VD_CORE_API VDError vd_utility_build_args(VDCoreHandle* handle,
                                        const char* request_json,
                                        VDStringArray* out_args);
 

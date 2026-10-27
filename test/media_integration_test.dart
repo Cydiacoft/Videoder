@@ -143,6 +143,8 @@ void main() {
         end: '1');
     expect(runner.state.status, '处理完成');
     expect(runner.state.output, isNotNull);
+    expect(runner.state.outputBytes, await File(runner.state.output!).length());
+    expect(runner.state.elapsed, isNotNull);
     expect(await File(input).length(), originalSize);
   },
       skip: ffmpeg == null

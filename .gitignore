@@ -72,4 +72,9 @@ app.*.map.json
 !.env.example
 /test/failures/
 /coverage/
+/assets/extensions/generated/*.vdx
+/assets/extensions/generated/index.json
+*.seed
 *.tmp
+
+/dist/

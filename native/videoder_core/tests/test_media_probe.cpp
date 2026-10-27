@@ -479,6 +479,26 @@ VD_TEST(probe_job_runs_ffprobe_and_parses_its_output) {
   VD_CHECK_EQ(info.streams.size(), static_cast<std::size_t>(4));
 }
 
+VD_TEST(probe_job_accepts_utf8_input_path) {
+  TempDir directory;
+  VD_CHECK(!directory.InstallStubFfprobe().empty());
+  const std::string input = directory.path().string() + "/" +
+                            reinterpret_cast<const char*>(u8"成品.mkv");
+  {
+    std::ofstream file(std::filesystem::path(
+                           std::u8string(input.begin(), input.end())),
+                       std::ios::binary);
+    file << "placeholder";
+  }
+  ProbeRequest request;
+  request.ffmpeg_path = directory.path().string();
+  request.input_path = input;
+  MediaInfo info;
+  const Status status = ProbeJob::Run(request, info);
+  VD_CHECK(status.ok());
+  VD_CHECK_EQ(info.video_count, 2);
+}
+
 VD_TEST(probe_job_classifies_ffprobe_failures) {
   TempDir directory;
   if (directory.InstallStubFfprobe().empty()) {

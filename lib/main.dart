@@ -9,6 +9,7 @@ import 'extensions/toolbox_extension.dart';
 import 'pages/settings_page.dart';
 import 'pages/expert_page.dart';
 import 'pages/image_page.dart';
+import 'pages/media_utilities_page.dart';
 import 'pages/toolbox_page.dart';
 import 'providers/media_provider.dart';
 import 'providers/app_provider.dart';
@@ -70,6 +71,7 @@ class MainLayout extends ConsumerStatefulWidget {
 
 class _MainLayoutState extends ConsumerState<MainLayout> {
   int _selected = 0;
+  String? _selectedExtensionPage;
   void _select(int index) {
     final job = ref.read(mediaProvider);
     if (index < 4 &&
@@ -83,7 +85,17 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       ref.read(mediaOperationProvider.notifier).state =
           MediaOperation.values[index];
     }
-    setState(() => _selected = index);
+    final pages = ref
+        .read(availableExtensionsProvider)
+        .where((extension) =>
+            ref.read(extensionManagerProvider).enabled.contains(extension.id))
+        .expand((extension) => extension.pages)
+        .toList();
+    setState(() {
+      _selected = index;
+      _selectedExtensionPage =
+          index >= 8 && index - 8 < pages.length ? pages[index - 8].id : null;
+    });
   }
 
   Widget _nav(int index, String label, IconData icon, bool narrow) {
@@ -143,11 +155,18 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     final configured =
         ref.watch(appSettingsProvider).ffmpegPath?.isNotEmpty == true;
     final enabled = ref.watch(extensionManagerProvider).enabled;
-    final pages = bundledExtensions
+    final pages = ref
+        .watch(availableExtensionsProvider)
         .where((e) => enabled.contains(e.id))
         .expand((e) => e.pages)
         .toList();
-    if (_selected >= 7 + pages.length) _selected = 4;
+    if (_selectedExtensionPage != null) {
+      final index =
+          pages.indexWhere((page) => page.id == _selectedExtensionPage);
+      _selected = index < 0 ? 4 : index + 8;
+      if (index < 0) _selectedExtensionPage = null;
+    }
+    if (_selected >= 8 + pages.length) _selected = 4;
     final narrow = MediaQuery.sizeOf(context).width < 860;
     return Scaffold(
         body: Column(children: [
@@ -206,13 +225,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                     _nav(3, '视频剪切', Icons.content_cut_rounded, narrow),
                     _nav(5, '专业工作台', Icons.terminal_rounded, narrow),
                     _nav(6, '图像处理', Icons.image_outlined, narrow),
+                    _nav(7, '更多工具', Icons.handyman_outlined, narrow),
                     if (pages.isNotEmpty) ...[
                       if (!narrow)
                         _caption('扩展工具')
                       else
                         const SizedBox(height: 20),
                       for (var i = 0; i < pages.length; i++)
-                        _nav(i + 7, pages[i].label, pages[i].icon, narrow)
+                        _nav(i + 8, pages[i].label, pages[i].icon, narrow)
                     ],
                   ])),
                   const Divider(indent: 16, endIndent: 16, height: 18),
@@ -301,10 +321,13 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                               enabled: _selected == 6,
                               child:
                                   ImagePage(onOpenSettings: () => _select(4))),
+                          TickerMode(
+                              enabled: _selected == 7,
+                              child: const MediaUtilitiesPage()),
                           for (var i = 0; i < pages.length; i++)
                             TickerMode(
                                 key: ValueKey(pages[i].id),
-                                enabled: _selected == i + 7,
+                                enabled: _selected == i + 8,
                                 child: pages[i].build()),
                         ])))),
       ])),

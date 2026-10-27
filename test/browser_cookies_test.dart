@@ -34,4 +34,12 @@ void main() {
             {'cookie-browser': 'chrome', 'cookie-profile': 'a\nb'}),
         throwsFormatException);
   });
+  test('Douyin detail rejection explains Cookie and extractor limits', () {
+    final help = BrowserCookies.failureHelp(
+        'ERROR: [Douyin] 123: Fresh cookies (not necessarily logged in) are needed',
+        {});
+    expect(help, contains('抖音'));
+    expect(help, contains('更新 yt-dlp'));
+    expect(help, contains('Aria2'));
+  });
 }

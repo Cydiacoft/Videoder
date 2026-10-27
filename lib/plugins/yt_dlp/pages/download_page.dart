@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/download_provider.dart';
 import '../providers/activity_provider.dart';
+import '../services/download_links.dart';
 import '../../../providers/app_provider.dart' as core;
 
 class DownloadPage extends ConsumerStatefulWidget {
@@ -20,6 +21,8 @@ class _DownloadPageState extends ConsumerState<DownloadPage> {
   bool _batchRunning = false;
   bool _stopQueue = false;
   bool _logsExpanded = false;
+  int _queueIndex = 0;
+  int _queueTotal = 0;
   @override
   void dispose() {
     _stopQueue = true;
@@ -27,29 +30,34 @@ class _DownloadPageState extends ConsumerState<DownloadPage> {
     super.dispose();
   }
 
-  String _parse(String value) =>
-      (RegExp(r'https?://[^\s<>"\[\]]+').firstMatch(value)?.group(0) ??
-              value.trim())
-          .replaceFirst(RegExp(r'[),.;]+$'), '');
   Future<void> _download() async {
-    final urls = _urls.text
-        .split('\n')
-        .where((line) => line.trim().isNotEmpty)
-        .map(_parse)
-        .toList();
-    if (urls.isEmpty) return;
-    ref.read(downloadQueueProvider.notifier).state = true;
+    if (_batchRunning) return;
+    final List<String> urls;
+    try {
+      urls = parseDownloadLinks(_urls.text);
+      if (urls.isEmpty) throw const FormatException('请先填写媒体链接');
+    } on FormatException catch (error) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+    final queue = ref.read(downloadQueueProvider.notifier);
+    queue.state = true;
     setState(() {
       _batchRunning = true;
       _stopQueue = false;
+      _queueIndex = 0;
+      _queueTotal = urls.length;
     });
     try {
       for (final url in urls) {
         if (_stopQueue || !mounted) break;
+        setState(() => _queueIndex++);
         await ref.read(downloadProvider.notifier).startDownload(url);
       }
     } finally {
-      ref.read(downloadQueueProvider.notifier).state = false;
+      // The page may have been removed while the current download finished.
+      if (queue.mounted) queue.state = false;
       if (mounted) setState(() => _batchRunning = false);
     }
   }
@@ -184,7 +192,9 @@ class _DownloadPageState extends ConsumerState<DownloadPage> {
               FilledButton.icon(
                   onPressed: busy || !settings.isConfigured ? null : _download,
                   icon: const Icon(Icons.download, size: 16),
-                  label: const Text('开始下载')),
+                  label: Text(_batchRunning
+                      ? '正在处理 $_queueIndex/$_queueTotal'
+                      : '开始下载')),
               OutlinedButton(
                   onPressed: busy
                       ? null
@@ -207,8 +217,11 @@ class _DownloadPageState extends ConsumerState<DownloadPage> {
                   child: const Text('导入链接文件')),
               if (busy)
                 OutlinedButton(
-                    onPressed: () => setState(() => _stopQueue = true),
-                    child: Text(_stopQueue ? '当前任务完成后停止' : '停止后续任务')),
+                    onPressed: () {
+                      setState(() => _stopQueue = true);
+                      ref.read(downloadProvider.notifier).cancelDownload();
+                    },
+                    child: Text(_stopQueue ? '正在停止' : '停止下载')),
             ]),
             const SizedBox(height: 24),
             const Divider(),
@@ -233,7 +246,7 @@ class _DownloadPageState extends ConsumerState<DownloadPage> {
                       ? null
                       : Text(task.errorMessage!),
                   trailing: Text(
-                      ['等待', '下载中', '完成', '失败', '跳过'][task.status.index],
+                      ['等待', '下载中', '完成', '失败', '跳过', '已停止'][task.status.index],
                       style: const TextStyle(fontSize: 12))),
           ])),
           TaskStatusBar(

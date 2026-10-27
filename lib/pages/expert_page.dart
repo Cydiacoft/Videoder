@@ -1,5 +1,7 @@
 import '../widgets/diagnostic_panel.dart';
 import '../widgets/task_status_bar.dart';
+import '../widgets/editor_layout.dart';
+import '../widgets/editor_presets.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -167,6 +169,88 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
   bool _stale = false;
   Map<String, dynamic>? _metadata;
   int _tab = 0;
+
+  Map<String, dynamic> _presetValues() => {
+        'audioMode': _audioMode,
+        'preset': _preset.name,
+        'audioPreset': _audioPreset.name,
+        'videoFormat': _videoFormat,
+        'audioFormat': _audioFormat,
+        'encoder': _encoder,
+        'audioEncoder': _audio,
+        'quality': _quality.text,
+        'videoBitrate': _videoBitrate.text,
+        'audioBitrate': _audioBitrate.text,
+        'videoFilter': _videoFilter.text,
+        'audioFilter': _audioFilter.text,
+        'speedPreset': _speedPreset,
+        'rate': _rate,
+        'channels': _channels,
+        'audioKbps': _audioKbps,
+        'start': _start.text,
+        'end': _end.text,
+      };
+  void _applyEditorPreset(Map<String, dynamic> values) {
+    setState(() {
+      _audioMode = values['audioMode'] == true;
+      _preset = ExpertPreset.transcode;
+      _audioPreset = AudioPreset.convert;
+      for (final preset in ExpertPreset.values) {
+        if (preset.name == values['preset']) _preset = preset;
+      }
+      for (final preset in AudioPreset.values) {
+        if (preset.name == values['audioPreset']) _audioPreset = preset;
+      }
+      _videoFormat = ExpertConstraints.formats.contains(values['videoFormat'])
+          ? values['videoFormat'] as String
+          : 'mp4';
+      if (_preset == ExpertPreset.remux) _videoFormat = 'mkv';
+      if (_preset == ExpertPreset.gif) _videoFormat = 'gif';
+      _audioFormat =
+          ['mp3', 'm4a', 'flac', 'wav'].contains(values['audioFormat'])
+              ? values['audioFormat'] as String
+              : 'mp3';
+      _encoder = values['encoder']?.toString() ?? 'libx264';
+      _audio = values['audioEncoder']?.toString() ?? 'aac';
+      _quality.text = values['quality']?.toString() ?? '23';
+      _videoBitrate.text = values['videoBitrate']?.toString() ?? '';
+      _audioBitrate.text = values['audioBitrate']?.toString() ?? '192k';
+      _videoFilter.text = values['videoFilter']?.toString() ?? '';
+      _audioFilter.text = values['audioFilter']?.toString() ?? '';
+      final speed = values['speedPreset'];
+      _speedPreset = [
+        'ultrafast',
+        'superfast',
+        'veryfast',
+        'faster',
+        'fast',
+        'medium',
+        'slow',
+        'slower',
+        'veryslow'
+      ].contains(speed)
+          ? speed as String
+          : 'medium';
+      _rate = [44100, 48000, 96000].contains(values['rate'])
+          ? values['rate'] as int
+          : 48000;
+      _channels =
+          [1, 2].contains(values['channels']) ? values['channels'] as int : 2;
+      _audioKbps = [128, 192, 256, 320].contains(values['audioKbps'])
+          ? values['audioKbps'] as int
+          : 192;
+      if (_audioFormat == 'mp3' && _rate > 48000) _rate = 48000;
+      _start.text = values['start']?.toString() ?? '0';
+      _end.text = values['end']?.toString() ?? '10';
+      _gpuPipeline = false;
+      if (_output.text.isNotEmpty) {
+        _output.text = p.setExtension(_output.text, _extension);
+      }
+      _reconcile();
+      _stale = _arguments.text.isNotEmpty;
+    });
+  }
+
   @override
   void dispose() {
     for (final c in [
@@ -402,6 +486,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         DropdownButtonFormField<AudioPreset>(
+            key: ValueKey('audio-operation:$_audioPreset'),
             initialValue: _audioPreset,
             decoration: const InputDecoration(labelText: '音频操作'),
             items: [
@@ -421,6 +506,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
           SizedBox(
               width: 180,
               child: DropdownButtonFormField<String>(
+                  key: ValueKey('audio-format:$_audioFormat'),
                   initialValue: _audioFormat,
                   decoration: const InputDecoration(labelText: '音频格式'),
                   items: [
@@ -466,6 +552,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
               width: 180,
               child: DropdownButtonFormField<int>(
                   initialValue: _channels,
+                  key: ValueKey('audio-channels:$_channels'),
                   decoration: const InputDecoration(labelText: '声道'),
                   items: const [
                     DropdownMenuItem(value: 1, child: Text('单声道')),
@@ -482,6 +569,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                 width: 180,
                 child: DropdownButtonFormField<int>(
                     initialValue: _audioKbps,
+                    key: ValueKey('audio-bitrate:$_audioKbps'),
                     decoration: const InputDecoration(labelText: '音频码率'),
                     items: [
                       for (final rate in [128, 192, 256, 320])
@@ -564,46 +652,41 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
         onClose: () => setState(() => _logsExpanded = false),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          EditorHeader(
+              title: '专业工作台',
+              description: '向导快速处理，自由编辑参数，或检查媒体信息。',
+              trailing: DiagnosticButton(
+                  expanded: _logsExpanded,
+                  title: '执行日志',
+                  onPressed: () =>
+                      setState(() => _logsExpanded = !_logsExpanded))),
           Padding(
-              padding: const EdgeInsets.fromLTRB(28, 26, 28, 18),
-              child: Row(children: [
-                Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Text('专业工作台',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 7),
-                      Text('选择要做的事，添加素材并保存；推荐参数已为你准备好。',
-                          style: TextStyle(
-                              fontSize: 12, color: c.onSurfaceVariant))
-                    ])),
-                DiagnosticButton(
-                    expanded: _logsExpanded,
-                    title: '执行日志',
-                    onPressed: () =>
-                        setState(() => _logsExpanded = !_logsExpanded))
-              ])),
-          Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: Wrap(spacing: 8, children: [
-                ChoiceChip(
-                    label: const Text('向导操作'),
-                    selected: _tab == 0,
-                    onSelected: (_) => setState(() => _tab = 0)),
-                ChoiceChip(
-                    label: const Text('命令编辑'),
-                    selected: _tab == 1,
-                    onSelected: (_) => setState(() => _tab = 1)),
-                ChoiceChip(
-                    label: const Text('媒体信息'),
-                    selected: _tab == 2,
-                    onSelected: (_) => setState(() => _tab = 2))
-              ])),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SegmentedButton<int>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                            value: 0,
+                            icon: Icon(Icons.tune, size: 16),
+                            label: Text('向导操作')),
+                        ButtonSegment(
+                            value: 1,
+                            icon: Icon(Icons.terminal, size: 16),
+                            label: Text('命令编辑')),
+                        ButtonSegment(
+                            value: 2,
+                            icon: Icon(Icons.info_outline, size: 16),
+                            label: Text('媒体信息')),
+                      ],
+                      selected: {_tab},
+                      onSelectionChanged: (value) =>
+                          setState(() => _tab = value.single)))),
           Expanded(
               child: ListView(
                   key: ValueKey(_tab),
-                  padding: const EdgeInsets.fromLTRB(28, 18, 28, 22),
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
                   children: [
                 if (_tab == 0) ...[
                   Align(
@@ -626,6 +709,29 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                 }),
                       )),
                   const SizedBox(height: 16),
+                  EditorPresets(
+                      scope: 'expert',
+                      disabled: busy,
+                      builtins: const {
+                        '1080p 视频 · H.264': {
+                          'preset': 'transcode',
+                          'videoFilter': "scale=-2:'trunc(min(1080,ih)/2)*2'"
+                        },
+                        '聊天分享 · 压缩视频': {
+                          'preset': 'transcode',
+                          'quality': '30',
+                          'videoFilter': "scale='trunc(min(1280,iw)/2)*2':-2",
+                          'audioBitrate': '128k'
+                        },
+                        '提取 MP3 · 192 kbps': {
+                          'audioMode': true,
+                          'audioFormat': 'mp3',
+                          'audioKbps': 192
+                        },
+                      },
+                      readCurrent: _presetValues,
+                      onApply: _applyEditorPreset),
+                  const SizedBox(height: 12),
                 ],
                 if (_tab != 1)
                   StudioPanel(
@@ -704,6 +810,8 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                     child: DropdownButtonFormField<
                                             ExpertPreset>(
                                         initialValue: _preset,
+                                        key: ValueKey(
+                                            'video-operation:$_preset'),
                                         decoration: const InputDecoration(
                                             labelText: '你想做什么？'),
                                         items: ExpertPreset.values
@@ -1090,10 +1198,13 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                                   'PingFang SC',
                                   'Noto Sans CJK SC'
                                 ],
-                                fontSize: 12,
+                                fontSize: 13,
+                                height: 1.7,
                                 color: c.onSurface),
                             onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
+                                filled: true,
+                                contentPadding: EdgeInsets.all(16),
                                 hintText:
                                     '-i "input.mp4" -c:v libx264 -crf 23 -c:a aac "output.mp4"',
                                 alignLabelWithHint: true)),

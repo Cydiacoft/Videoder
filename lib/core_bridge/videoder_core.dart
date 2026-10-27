@@ -632,6 +632,26 @@ class VideoderCore implements Finalizable {
     return payload == null ? null : jsonDecode(payload) as Map<String, dynamic>;
   }
 
+  List<String> buildUtilityArguments(Map<String, dynamic> request) {
+    final payload = jsonEncode(request).toNativeUtf8();
+    var output = NativeStringArray(_initialArgumentCapacity);
+    try {
+      int build() =>
+          _bindings.buildUtilityArguments(_openHandle, payload, output.pointer);
+      _checkNativeCode('vd_utility_build_args', build());
+      final count = stringArrayCount(output.pointer);
+      if (count > output.capacity) {
+        output.free();
+        output = NativeStringArray(count);
+        _checkNativeCode('vd_utility_build_args', build());
+      }
+      return readStringArray(output.pointer);
+    } finally {
+      output.free();
+      malloc.free(payload);
+    }
+  }
+
   /// Runs yt-dlp through the core's process tree and task scheduler. The
   /// caller formats progress and verifies final media from the returned paths.
   Future<Map<String, dynamic>> runDownloadTask({

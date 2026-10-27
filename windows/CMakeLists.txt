@@ -2,8 +2,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(videoder_demo LANGUAGES CXX)
 
-# Set Visual Studio platform toolset - use VS 2026 toolset
-set(CMAKE_VS_PLATFORM_TOOLSET v180)
+# Use the installed Visual Studio generator toolset on developer and CI hosts.
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
@@ -51,6 +50,28 @@ endfunction()
 # Flutter library and tool build rules.
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
+function(VIDEODER_GET_FLUTTER_ROOT)
+  include("${FLUTTER_MANAGED_DIR}/ephemeral/generated_config.cmake")
+  set(VIDEODER_FLUTTER_ROOT "${FLUTTER_ROOT}" PARENT_SCOPE)
+endfunction()
+VIDEODER_GET_FLUTTER_ROOT()
+
+# Independent signed plugin engines are built before Flutter collects assets.
+set(PLUGIN_PACKAGE_INDEX "${CMAKE_CURRENT_SOURCE_DIR}/../assets/extensions/generated/index.json")
+file(GLOB_RECURSE PLUGIN_PACKAGE_SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/../extensions/bundled/*.json"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../lib/extensions/plugin_*.dart"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../lib/plugins/tiktok_downloader/*service.dart")
+add_custom_command(OUTPUT "${PLUGIN_PACKAGE_INDEX}"
+  COMMAND "${VIDEODER_FLUTTER_ROOT}/bin/cache/dart-sdk/bin/dart.exe" run tools/plugin_tool.dart bundle
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  DEPENDS ${PLUGIN_PACKAGE_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tools/plugin_tool.dart"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tools/plugin_worker.dart"
+  COMMENT "Building signed Videoder extension packages"
+  VERBATIM)
+add_custom_target(videoder_extension_packages DEPENDS "${PLUGIN_PACKAGE_INDEX}")
+add_dependencies(flutter_assemble videoder_extension_packages)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")

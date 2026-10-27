@@ -15,6 +15,8 @@ import '../services/video_download.dart';
 import '../../../services/tool_process.dart';
 import '../../../providers/app_provider.dart' as core;
 import '../../../core_bridge/videoder_core.dart' as native;
+import '../../../extensions/plugin_manager.dart';
+import '../../../extensions/plugin_task_request.dart';
 
 enum DownloadFormat {
   video,
@@ -42,6 +44,7 @@ enum CookiePlatform {
   bilibili,
   twitter,
   tiktok,
+  douyin,
   custom,
 }
 
@@ -109,6 +112,8 @@ extension CookiePlatformExtension on CookiePlatform {
         return 'X (Twitter)';
       case CookiePlatform.tiktok:
         return 'TikTok';
+      case CookiePlatform.douyin:
+        return '抖音';
       case CookiePlatform.custom:
         return '自定义';
     }
@@ -124,6 +129,8 @@ extension CookiePlatformExtension on CookiePlatform {
         return 'x.com';
       case CookiePlatform.tiktok:
         return 'tiktok.com';
+      case CookiePlatform.douyin:
+        return 'douyin.com';
       case CookiePlatform.custom:
         return '';
     }
@@ -139,6 +146,8 @@ extension CookiePlatformExtension on CookiePlatform {
         return 'cookies_twitter.txt';
       case CookiePlatform.tiktok:
         return 'cookies_tiktok.txt';
+      case CookiePlatform.douyin:
+        return 'cookies_douyin.txt';
       case CookiePlatform.custom:
         return 'cookies_custom.txt';
     }
@@ -534,7 +543,9 @@ class DownloadSettingsNotifier extends StateNotifier<DownloadSettings> {
 
     final matchedCookies = state.customCookies.where((cookie) {
       final domain = _normalizeCookieDomain(cookie.domain);
-      return host == domain || host.endsWith('.$domain');
+      return host == domain ||
+          host.endsWith('.$domain') ||
+          (host == 'v.douyin.com' && domain == 'www.douyin.com');
     }).toList()
       ..sort((a, b) => b.domain.length.compareTo(a.domain.length));
 
@@ -565,6 +576,7 @@ class DownloadSettingsNotifier extends StateNotifier<DownloadSettings> {
       return CookiePlatform.twitter;
     }
     if (matches('tiktok.com')) return CookiePlatform.tiktok;
+    if (matches('douyin.com')) return CookiePlatform.douyin;
     return null;
   }
 
@@ -690,11 +702,13 @@ class DownloadState {
 
 class DownloadNotifier extends StateNotifier<DownloadState> {
   final Ref _ref;
+  bool _cancelRequested = false;
 
   DownloadNotifier(this._ref) : super(const DownloadState());
 
   Future<void> startDownload(String url) async {
     if (state.isDownloading) return;
+    _cancelRequested = false;
     final uri = Uri.tryParse(url);
     if (uri == null ||
         !['http', 'https'].contains(uri.scheme) ||
@@ -742,6 +756,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     try {
       final args = await _buildArgs(settings, url, logs);
+      if (_cancelRequested) throw StateError('已停止');
       final executable = resolveExecutable(settings.ytDlpPath!, 'yt-dlp');
       int exitCode;
       String fullOutput;
@@ -759,7 +774,44 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       }
 
       final bridge = native.videoderCore;
-      if (bridge != null) {
+      if (Platform.isWindows) {
+        final result = await _ref.read(pluginManagerProvider.notifier).execute(
+            'yt-dlp',
+            PluginTaskRequest(outputDirectory: settings.downloadPath!, inputs: {
+              'arguments': args
+            }, dependencies: {
+              'yt-dlp': executable,
+              'ffmpeg': settings.ffmpegPath!,
+              'aria2': settings.aria2Path ?? ''
+            }),
+            isCancelled: () => _cancelRequested,
+            onEvent: (method, detail) {
+              if (method == 'progress') {
+                reportProgress(DownloadProgress(
+                    stage: detail['message']?.toString() ?? '正在处理',
+                    fraction: (detail['fraction'] as num?)?.toDouble(),
+                    speed: detail['speed']?.toString() ?? '',
+                    eta: detail['eta']?.toString() ?? ''));
+                return;
+              }
+              if (method == 'log') {
+                logs.add(detail['message']?.toString() ?? '');
+                return;
+              }
+              if (method != 'output') return;
+              final line = detail['line'] as String? ?? '';
+              final progress = DownloadProgress.parse(line);
+              if (progress != null) {
+                reportProgress(progress);
+              } else if (line.trim().isNotEmpty &&
+                  !line.startsWith(VideoDownload.marker)) {
+                logs.add(line);
+              }
+            });
+        exitCode = result['exitCode'] as int;
+        fullOutput = result['output'] as String? ?? '';
+        nativePaths = (result['paths'] as List?)?.cast<String>();
+      } else if (bridge != null) {
         final result = await bridge.runDownloadTask(
           executable: executable,
           arguments: args,
@@ -806,6 +858,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         fullOutput = stdoutBuffer.toString() + stderrBuffer.toString();
       }
 
+      if (_cancelRequested) throw StateError('已停止');
       if (exitCode != 0) {
         final errorMatch =
             RegExp(r'ERROR?\s*[:\-]?\s*(.+)', caseSensitive: false)
@@ -858,6 +911,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         }
       }
 
+      if (_cancelRequested) throw StateError('已停止');
       final updatedTasks = state.tasks.map((t) {
         if (t.id == taskId) {
           return t.copyWith(
@@ -893,13 +947,19 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         currentTaskIndex: null,
       );
     } catch (e) {
-      logs.addError('发生异常: $e');
+      if (_cancelRequested) {
+        logs.addInfo('下载已停止');
+      } else {
+        logs.addError('发生异常: $e');
+      }
 
       final updatedTasks = state.tasks.map((t) {
         if (t.id == taskId) {
           return t.copyWith(
-            status: DownloadStatus.failed,
-            errorMessage: e.toString(),
+            status: _cancelRequested
+                ? DownloadStatus.cancelled
+                : DownloadStatus.failed,
+            errorMessage: _cancelRequested ? '已停止' : e.toString(),
           );
         }
         return t;
@@ -908,10 +968,16 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       state = state.copyWith(
         isDownloading: false,
         tasks: updatedTasks,
-        progress: const DownloadProgress(stage: '下载失败，请展开日志查看原因'),
+        progress: DownloadProgress(
+            stage: _cancelRequested ? '已停止' : '下载失败，请展开日志查看原因'),
         currentTaskIndex: null,
       );
     }
+  }
+
+  Future<void> cancelDownload() async {
+    _cancelRequested = true;
+    await _ref.read(pluginManagerProvider.notifier).stop('yt-dlp');
   }
 
   Future<List<String>> _buildArgs(

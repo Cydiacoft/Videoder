@@ -71,7 +71,8 @@ VDError vd_image_build_args(VDCoreHandle* handle, const char* request_json,
         !NumberField(value, "crop_y", request.crop_y, error) ||
         !NumberField(value, "crop_width", request.crop_width, error) ||
         !NumberField(value, "crop_height", request.crop_height, error) ||
-        !NumberField(value, "rotation", request.rotation, error)) {
+        !NumberField(value, "rotation", request.rotation, error) ||
+        !NumberField(value, "preview_max_width", request.preview_max_width, error)) {
       SetLastError(error);
       return VD_ERROR_INVALID_ARGUMENT;
     }

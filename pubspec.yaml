@@ -2,7 +2,7 @@ name: videoader
 description: A desktop FFmpeg toolbox with an optional yt-dlp extension.
 publish_to: 'none'
 
-version: 26.10.3+7
+version: 26.10.27+8
 
 environment:
   # NativeCallable.listener / NativeFinalizer (used by lib/core_bridge) need
@@ -24,6 +24,8 @@ dependencies:
   # Dart FFI helpers (Utf8, calloc) for lib/core_bridge.
   ffi: ^2.1.0
   crypto: ^3.0.7
+  archive: ^4.3.0
+  cryptography: ^2.9.0
 
 dev_dependencies:
   flutter_test:
@@ -40,3 +42,5 @@ flutter:
     - LICENSE
     - NOTICE
     - assets/branding/app_icon.png
+    - assets/extensions/index.json
+    - assets/extensions/generated/

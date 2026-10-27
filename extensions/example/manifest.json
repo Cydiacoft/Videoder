@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1, "protocolVersion": 1, "hostApiVersion": 1,
+  "id": "example.text", "name": "文本保存示例", "publisher": "Example",
+  "version": "1.0.0", "platform": "windows-x64", "entrypoint": "bin/plugin.exe",
+  "description": "演示任务输入、设置和进度通知。",
+  "permissions": ["在用户选择的输出目录保存文本"],
+  "fields": [{"id":"message", "label":"文本", "type":"multiline", "required":true}],
+  "settings": [{"id":"uppercase", "label":"转为大写", "type":"bool", "default":false}],
+  "dependencies": []
+}

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:videoader/main.dart';
 import 'package:videoader/extensions/toolbox_extension.dart';
+import 'package:videoader/extensions/plugin_manager.dart';
 import 'package:videoader/plugins/yt_dlp/providers/download_provider.dart';
 import 'package:videoader/plugins/yt_dlp/providers/activity_provider.dart';
 import 'package:videoader/services/app_update.dart';
@@ -40,7 +41,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    late PluginManager plugins;
+    await tester.runAsync(() async {
+      plugins =
+          PluginManager(rootOverride: Directory('${temp.path}/extensions'));
+      await plugins.ready;
+    });
     await tester.pumpWidget(ProviderScope(overrides: [
+      pluginManagerProvider.overrideWith((ref) => plugins),
       downloadSettingsProvider
           .overrideWith((ref) => TestDownloadSettings(temp.path))
     ], child: const VideoaderApp()));
@@ -48,6 +56,9 @@ void main() {
     expect(find.text('FFmpeg Studio'), findsOneWidget);
     expect(find.text('网络下载'), findsNothing);
     expect(find.text('Cookie 管理'), findsNothing);
+    await tester.tap(find.text('更多工具').first);
+    await tester.pumpAndSettle();
+    expect(find.text('更多 FFmpeg 工具'), findsOneWidget);
     await tester.tap(find.text('图像处理').first);
     await tester.pumpAndSettle();
     expect(find.text('图像编辑'), findsOneWidget);
@@ -72,8 +83,12 @@ void main() {
     expect(find.text('版本 ${await AppUpdate.currentVersion()}'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(Switch));
-    await tester.tap(find.byType(Switch));
+    await tester.ensureVisible(find.descendant(
+        of: find.widgetWithText(ListTile, 'yt-dlp 网络下载'),
+        matching: find.byType(Switch)));
+    await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, 'yt-dlp 网络下载'),
+        matching: find.byType(Switch)));
     await tester.pumpAndSettle();
     expect(find.text('网络下载'), findsOneWidget);
     await tester.tap(find.text('网络下载'));
@@ -88,6 +103,8 @@ void main() {
     expect(find.text('等待下载任务…'), findsNothing);
     expect(find.text('等待下载'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('下载与 Cookie').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('下载与 Cookie').first);
     await tester.pumpAndSettle();
     expect(find.text('Cookie 管理'), findsOneWidget);
@@ -110,10 +127,18 @@ void main() {
         ProviderScope.containerOf(tester.element(find.byType(MainLayout)));
     container.read(downloadMaintenanceProvider.notifier).state = true;
     await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+    expect(
+        tester
+            .widget<Switch>(find.descendant(
+                of: find.widgetWithText(ListTile, 'yt-dlp 网络下载'),
+                matching: find.byType(Switch)))
+            .onChanged,
+        isNull);
     container.read(downloadMaintenanceProvider.notifier).state = false;
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.descendant(
+        of: find.widgetWithText(ListTile, 'yt-dlp 网络下载'),
+        matching: find.byType(Switch)));
     await tester.pumpAndSettle();
     expect(find.text('网络下载'), findsNothing);
     await tester.tap(find.text('专业工作台').first);

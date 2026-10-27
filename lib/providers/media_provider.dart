@@ -14,11 +14,15 @@ class MediaState {
   final String status;
   final String? output;
   final List<String> logs;
+  final int? outputBytes;
+  final Duration? elapsed;
   const MediaState(
       {this.running = false,
       this.status = '等待处理',
       this.output,
-      this.logs = const []});
+      this.logs = const [],
+      this.outputBytes,
+      this.elapsed});
 }
 
 final mediaOperationProvider =
@@ -29,9 +33,12 @@ final mediaProvider =
 class MediaNotifier extends StateNotifier<MediaState> {
   MediaNotifier() : super(const MediaState());
   Process? _process;
+
   /// Native task id while a core-owned run is in flight, for cancellation.
   int? _taskId;
   bool _cancelled = false;
+  Stopwatch? _clock;
+  int _runVersion = 0;
   void _log(String line) {
     if (!mounted) return;
     state = MediaState(
@@ -43,9 +50,11 @@ class MediaNotifier extends StateNotifier<MediaState> {
             .toList());
   }
 
-  void _begin() {
+  int _begin() {
     _cancelled = false;
+    _clock = Stopwatch()..start();
     state = const MediaState(running: true, status: '准备处理');
+    return ++_runVersion;
   }
 
   void _error(Object error) {
@@ -54,11 +63,29 @@ class MediaNotifier extends StateNotifier<MediaState> {
     }
   }
 
-  void _finish() {
+  Future<void> _finish(int version) async {
+    if (version != _runVersion) return;
     _process = null;
-    if (mounted && state.running) {
-      state = MediaState(status: '已取消', logs: state.logs);
+    _taskId = null;
+    _clock?.stop();
+    final elapsed = _clock?.elapsed;
+    if (!mounted) return;
+    final completed = state;
+    int? bytes;
+    if (completed.output != null) {
+      try {
+        bytes = await File(completed.output!).length();
+      } on FileSystemException {
+        /* The result may have been moved externally. */
+      }
     }
+    if (!mounted || !identical(state, completed)) return;
+    state = MediaState(
+        status: completed.running ? '已取消' : completed.status,
+        output: completed.output,
+        logs: completed.logs,
+        outputBytes: bytes,
+        elapsed: elapsed);
   }
 
   Future<void> run(
@@ -74,7 +101,7 @@ class MediaNotifier extends StateNotifier<MediaState> {
       required String end,
       GpuAcceleration? gpu}) async {
     if (state.running) return;
-    _begin();
+    final version = _begin();
     try {
       if (executable.trim().isEmpty) {
         throw const FormatException('请先在设置中配置 FFmpeg');
@@ -105,7 +132,7 @@ class MediaNotifier extends StateNotifier<MediaState> {
     } catch (e) {
       _error(e);
     } finally {
-      _finish();
+      await _finish(version);
     }
   }
 
@@ -114,7 +141,7 @@ class MediaNotifier extends StateNotifier<MediaState> {
       required List<String> arguments,
       bool overwrite = false}) async {
     if (state.running) return;
-    _begin();
+    final version = _begin();
     try {
       if (executable.trim().isEmpty) throw const FormatException('请先配置 FFmpeg');
       await _execute(executable,
@@ -122,7 +149,7 @@ class MediaNotifier extends StateNotifier<MediaState> {
     } catch (e) {
       _error(e);
     } finally {
-      _finish();
+      await _finish(version);
     }
   }
 
@@ -154,7 +181,10 @@ class MediaNotifier extends StateNotifier<MediaState> {
       ffmpegPath: resolveExecutable(executable, 'ffmpeg'),
       arguments: args,
       outputPath: output,
-      onStarted: (taskId) => _taskId = taskId,
+      onStarted: (taskId) {
+        _taskId = taskId;
+        if (_cancelled || !mounted) core.cancelTask(taskId);
+      },
       onProgress: (progress) {
         if (!mounted) return;
         final parts = <String>[
@@ -258,6 +288,8 @@ class MediaNotifier extends StateNotifier<MediaState> {
             (producedMedia &&
                 await File(output).exists() &&
                 await File(output).length() > 0));
+    // File verification yields; the page/provider may be disposed meanwhile.
+    if (!mounted) return;
     state = MediaState(
         status: _cancelled
             ? '已取消（可能保留未完成文件）'

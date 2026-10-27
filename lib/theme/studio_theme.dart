@@ -36,7 +36,8 @@ ThemeData studioTheme(Brightness brightness) {
             'Noto Sans CJK SC'
           ],
           fontSize: 13,
-          fontWeight: FontWeight.w500)));
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0)));
   final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
       borderSide: BorderSide(color: colors.outlineVariant));
@@ -55,9 +56,20 @@ ThemeData studioTheme(Brightness brightness) {
     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     scaffoldBackgroundColor: colors.surface,
     textTheme: TextTheme(
-        bodyMedium: TextStyle(fontSize: 13, color: colors.onSurface),
-        bodySmall: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-        titleMedium: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        bodyLarge: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            letterSpacing: 0,
+            color: colors.onSurface),
+        bodyMedium:
+            TextStyle(fontSize: 13, letterSpacing: 0, color: colors.onSurface),
+        bodySmall: TextStyle(
+            fontSize: 12, letterSpacing: 0, color: colors.onSurfaceVariant),
+        labelLarge: const TextStyle(
+            fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0),
+        // Dropdowns inherit titleMedium; keep small Chinese glyphs regular.
+        titleMedium: const TextStyle(
+            fontSize: 14, fontWeight: FontWeight.w400, letterSpacing: 0),
         titleLarge: const TextStyle(
             fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: 0)),
     appBarTheme: AppBarTheme(

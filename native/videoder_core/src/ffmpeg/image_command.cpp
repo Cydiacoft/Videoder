@@ -22,7 +22,8 @@ bool BuildImageArguments(const ImageCommandOptions& request,
     return false;
   }
   if (request.format != "png" && request.format != "jpg" &&
-      request.format != "webp") {
+      request.format != "webp" && request.format != "bmp" &&
+      request.format != "tiff") {
     error = "unsupported image format";
     return false;
   }
@@ -45,6 +46,10 @@ bool BuildImageArguments(const ImageCommandOptions& request,
   if (request.rotation != 0 && request.rotation != 90 &&
       request.rotation != 180 && request.rotation != 270) {
     error = "rotation must be 0, 90, 180 or 270 degrees";
+    return false;
+  }
+  if (request.preview_max_width < 0 || request.preview_max_width > 1280) {
+    error = "preview width must be 0..1280 pixels";
     return false;
   }
 
@@ -76,6 +81,10 @@ bool BuildImageArguments(const ImageCommandOptions& request,
     filters.emplace_back("vflip");
   }
   if (request.rotation == 270) filters.emplace_back("transpose=cclock");
+  if (request.preview_max_width > 0) {
+    const auto limit = std::to_string(request.preview_max_width);
+    filters.push_back("scale=w='min(" + limit + ",iw)':h='min(" + limit + ",ih)':force_original_aspect_ratio=decrease");
+  }
   if (!filters.empty()) {
     std::string chain;
     for (const auto& filter : filters) {
@@ -89,8 +98,10 @@ bool BuildImageArguments(const ImageCommandOptions& request,
     result.insert(result.end(), {"-c:v", "png"});
   } else if (request.format == "jpg") {
     result.insert(result.end(), {"-c:v", "mjpeg", "-q:v", "2"});
-  } else {
+  } else if (request.format == "webp") {
     result.insert(result.end(), {"-c:v", "libwebp", "-quality", "90"});
+  } else {
+    result.insert(result.end(), {"-c:v", request.format});
   }
   result.push_back(request.output_path);
   arguments = std::move(result);

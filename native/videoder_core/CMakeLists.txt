@@ -27,6 +27,7 @@ set(VD_CORE_SOURCES
   src/api/download_api.cpp
   src/api/ffmpeg_api.cpp
   src/api/image_api.cpp
+  src/api/utility_api.cpp
   src/api/task_api.cpp
   src/api/videoder_core_api.cpp
   src/core/core_context.cpp

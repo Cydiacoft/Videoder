@@ -55,6 +55,19 @@ VD_TEST(covers_use_first_frame_and_frames_seek) {
   VD_CHECK_EQ(After(args, "-ss"), "12.5");
 }
 
+VD_TEST(preview_caps_both_dimensions_after_transforms) {
+  auto options = Base("edit");
+  options.width = 2000;
+  options.rotation = 90;
+  options.preview_max_width = 960;
+  std::vector<std::string> args;
+  std::string error;
+  VD_CHECK(BuildImageArguments(options, args, error));
+  VD_CHECK_EQ(After(args, "-vf"), "scale=2000:-1,transpose=clock,scale=w='min(960,iw)':h='min(960,ih)':force_original_aspect_ratio=decrease");
+  options.preview_max_width = 1281;
+  VD_CHECK(!BuildImageArguments(options, args, error));
+}
+
 VD_TEST(rejects_invalid_geometry_and_format) {
   std::vector<std::string> args;
   std::string error;
@@ -67,6 +80,21 @@ VD_TEST(rejects_invalid_geometry_and_format) {
   options = Base("edit");
   options.format = "exe";
   VD_CHECK(!BuildImageArguments(options, args, error));
+}
+
+VD_TEST(exports_all_supported_still_image_formats) {
+  for (const auto& format : {"png", "jpg", "webp", "bmp", "tiff"}) {
+    auto options = Base("edit");
+    options.format = format;
+    options.output_path = std::string("output.") + format;
+    std::vector<std::string> args;
+    std::string error;
+    VD_CHECK(BuildImageArguments(options, args, error));
+    const std::string codec = std::string(format) == "jpg" ? "mjpeg" :
+        std::string(format) == "webp" ? "libwebp" : format;
+    VD_CHECK_EQ(After(args, "-c:v"), codec);
+    VD_CHECK_EQ(After(args, "-frames:v"), "1");
+  }
 }
 
 VD_TEST(api_rejects_bad_json_and_returns_arguments) {

@@ -40,7 +40,7 @@ class DiagnosticPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final panel = Material(
+    Widget buildPanel() => Material(
         color: colors.surfaceContainerLow,
         shape: Border(left: BorderSide(color: colors.outlineVariant)),
         child:
@@ -70,26 +70,32 @@ class DiagnosticPanel extends StatelessWidget {
               ])),
           const Divider(height: 1),
           Expanded(
-              child: SingleChildScrollView(
-                  reverse: true,
-                  padding: const EdgeInsets.all(16),
-                  child: SelectableText(
-                      logs.isEmpty ? emptyText : logs.join('\n'),
-                      style: TextStyle(
-                          fontFamily: 'Consolas',
-                          fontFamilyFallback: const [
-                            'Microsoft YaHei UI',
-                            'PingFang SC',
-                            'Noto Sans CJK SC'
-                          ],
-                          fontSize: 12,
-                          color: colors.onSurfaceVariant)))),
+              child: SelectionArea(
+                  child: ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: logs.isEmpty ? 1 : logs.length,
+                      // Build only visible entries; joining all logs forces the
+                      // entire history through text layout on every update.
+                      itemBuilder: (context, index) => Text(
+                          logs.isEmpty
+                              ? emptyText
+                              : logs[logs.length - 1 - index],
+                          style: TextStyle(
+                              fontFamily: 'Consolas',
+                              fontFamilyFallback: const [
+                                'Microsoft YaHei UI',
+                                'PingFang SC',
+                                'Noto Sans CJK SC'
+                              ],
+                              fontSize: 12,
+                              color: colors.onSurfaceVariant))))),
         ]));
     return LayoutBuilder(builder: (context, constraints) {
       if (constraints.maxWidth >= 1100) {
         return Row(children: [
           Expanded(child: child),
-          if (expanded) SizedBox(width: 420, child: panel)
+          if (expanded) SizedBox(width: 420, child: buildPanel())
         ]);
       }
       return Stack(children: [
@@ -100,7 +106,7 @@ class DiagnosticPanel extends StatelessWidget {
               bottom: 0,
               right: 0,
               width: math.min(420, constraints.maxWidth),
-              child: panel)
+              child: buildPanel())
       ]);
     });
   }

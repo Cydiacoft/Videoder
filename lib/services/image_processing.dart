@@ -22,6 +22,7 @@ class ImageProcessingRequest {
     this.cropWidth,
     this.cropHeight,
     this.rotation = 0,
+    this.previewMaxWidth = 0,
   });
 
   final ImageOperation operation;
@@ -36,6 +37,52 @@ class ImageProcessingRequest {
   final int? cropWidth;
   final int? cropHeight;
   final int rotation;
+  final int previewMaxWidth;
+
+  ImageProcessingRequest forPreview(String directory) => ImageProcessingRequest(
+      operation: operation,
+      input: input,
+      outputDirectory: directory,
+      format: 'png',
+      timeSeconds: timeSeconds,
+      width: width,
+      height: height,
+      cropX: cropX,
+      cropY: cropY,
+      cropWidth: cropWidth,
+      cropHeight: cropHeight,
+      rotation: rotation,
+      previewMaxWidth: 960);
+
+  void validate() {
+    if (input.trim().isEmpty) throw const FormatException('请先选择图像或视频素材');
+    if (outputDirectory.trim().isEmpty) {
+      throw const FormatException('请选择输出文件夹');
+    }
+    if (!['png', 'jpg', 'webp', 'bmp', 'tiff'].contains(format)) {
+      throw const FormatException('不支持的图像输出格式');
+    }
+    if (!timeSeconds.isFinite || timeSeconds < 0) {
+      throw const FormatException('截图时间必须是大于或等于 0 的有限秒数');
+    }
+    for (final dimension in [width, height]) {
+      if (dimension != null && (dimension < 1 || dimension > 16384)) {
+        throw const FormatException('缩放宽高必须在 1–16384 像素之间，保持原样请留空');
+      }
+    }
+    final crop = [cropX, cropY, cropWidth, cropHeight];
+    if (crop.any((value) => value != null)) {
+      if (crop.any((value) => value == null)) {
+        throw const FormatException('裁剪需要填写 X、Y、宽、高全部四项');
+      }
+      if (cropX! < 0 || cropY! < 0 || cropWidth! < 1 || cropHeight! < 1) {
+        throw const FormatException('裁剪坐标不能小于 0，裁剪宽高必须大于 0');
+      }
+    }
+    if (![0, 90, 180, 270].contains(rotation)) {
+      throw const FormatException('旋转角度必须为 0、90、180 或 270 度');
+    }
+  }
 
   Map<String, dynamic> toCoreRequest(String output) => {
         'operation': operation.name,
@@ -50,6 +97,7 @@ class ImageProcessingRequest {
         if (cropWidth != null) 'crop_width': cropWidth,
         if (cropHeight != null) 'crop_height': cropHeight,
         'rotation': rotation,
+        if (previewMaxWidth > 0) 'preview_max_width': previewMaxWidth,
       };
 }
 
@@ -64,6 +112,7 @@ class ImageProcessor {
   }
 
   Future<File> run(String ffmpegPath, ImageProcessingRequest request) async {
+    request.validate();
     final core = videoderCore;
     if (core == null) throw StateError('原生核心不可用，请重新安装完整发行包');
     if (_cancelled) throw const ImageProcessingCancelled();

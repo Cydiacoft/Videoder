@@ -25,6 +25,19 @@ void main() {
     expect(settings.detectPlatform('https://bilibili.com.evil.com'), isNull);
     expect(
         settings.detectPlatform('https://b23.tv/abc'), CookiePlatform.bilibili);
+    expect(settings.detectPlatform('https://v.douyin.com/tcP-BFKOiJ4/'),
+        CookiePlatform.douyin);
+    expect(
+        settings
+            .detectPlatform('https://www.douyin.com/video/7691483184856487844'),
+        CookiePlatform.douyin);
+    expect(
+        settings.detectPlatform('https://douyin.com.evil.com/video/1'), isNull);
+    await settings.addCookie(
+        CookiePlatform.douyin, '', '', 'sessionid=fake-test-value');
+    final douyinPath = await settings.getCookiePath(CookiePlatform.douyin);
+    expect(await settings.resolveCookiePathForUrl('https://v.douyin.com/abc/'),
+        douyinPath);
     const original =
         '# Netscape HTTP Cookie File\n#HttpOnly_.bilibili.com\tTRUE\t/\tTRUE\t0\tSESSDATA\tfake-test-value\n';
     await settings.addCookie(CookiePlatform.bilibili, '', '', original);
@@ -47,6 +60,12 @@ void main() {
         customPath);
     expect(await settings.resolveCookiePathForUrl('https://evilbilibili.com'),
         isNull);
+    await settings.addCustomCookie(
+        'Douyin', 'www.douyin.com', '', 'sessionid=fake-test-value');
+    final douyinCustom = settings.state.customCookies
+        .firstWhere((cookie) => cookie.domain == 'www.douyin.com');
+    expect(await settings.resolveCookiePathForUrl('https://v.douyin.com/abc/'),
+        await settings.getCustomCookiePath(douyinCustom.id));
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('custom_cookies'),
         isNot(contains('custom-test-value')));

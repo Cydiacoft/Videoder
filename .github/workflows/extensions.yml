@@ -1,0 +1,81 @@
+name: Extension packages
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Plugin release tag, e.g. plugins-v1.0.0'
+        required: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run tools/plugin_tool.dart bundle
+      - run: flutter test --no-pub test/plugin_system_test.dart test/plugin_runtime_test.dart test/plugin_manager_test.dart test/plugin_center_test.dart
+      - run: flutter analyze --no-pub lib test tools/plugin_tool.dart tools/plugin_worker.dart
+      - run: flutter build windows --release --no-pub
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    environment: extension-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build and sign packages
+        run: dart run tools/plugin_tool.dart bundle --release
+        env:
+          VIDEODER_PLUGIN_SIGNING_KEY: ${{ secrets.VIDEODER_PLUGIN_SIGNING_KEY }}
+          VIDEODER_PLUGIN_RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/${{ inputs.release_tag }}
+      - name: Verify signed packages
+        run: |
+          dart run tools/plugin_tool.dart verify assets/extensions/generated/yt-dlp.vdx
+          dart run tools/plugin_tool.dart verify assets/extensions/generated/tiktok-downloader.vdx
+      - name: Publish draft for review
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release create $env:PLUGIN_RELEASE_TAG assets/extensions/generated/yt-dlp.vdx assets/extensions/generated/tiktok-downloader.vdx build/plugin-packages/catalog.json --draft --latest=false --title $env:PLUGIN_RELEASE_TAG --notes 'Signed Videoder extension packages. Deploy catalog.json to extensions/catalog.json after publishing.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-extension-assets
+          path: |
+            assets/extensions/generated/*
+            build/plugin-packages/catalog.json
+  windows-release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    environment: extension-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Prepare official offline packages
+        run: dart run tools/plugin_tool.dart bundle --release
+        env:
+          VIDEODER_PLUGIN_SIGNING_KEY: ${{ secrets.VIDEODER_PLUGIN_SIGNING_KEY }}
+      - run: flutter build windows --release --no-pub
+        env:
+          VIDEODER_PLUGIN_SIGNING_KEY: ${{ secrets.VIDEODER_PLUGIN_SIGNING_KEY }}
+      - run: pwsh -File tools/package_windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videoder-windows-x64
+          path: dist/*

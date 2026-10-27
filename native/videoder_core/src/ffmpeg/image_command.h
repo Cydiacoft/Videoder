@@ -18,6 +18,7 @@ struct ImageCommandOptions {
   int crop_width = 0;
   int crop_height = 0;
   int rotation = 0;
+  int preview_max_width = 0;
 };
 
 bool BuildImageArguments(const ImageCommandOptions& request,

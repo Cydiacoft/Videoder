@@ -25,22 +25,41 @@ class CookieCodec {
         content.startsWith('# Netscape') ||
         content.startsWith('# HTTP Cookie');
     if (netscape) {
-      for (final line in content.split(RegExp(r'\r?\n'))) {
+      final lines = content.split(RegExp(r'\r\n|\n|\r'));
+      for (var index = 0; index < lines.length; index++) {
+        final line = lines[index];
         if (line.trim().isEmpty ||
             (line.startsWith('#') && !line.startsWith('#HttpOnly_'))) {
           continue;
         }
-        final fields = line.split('\t');
+        var fields = line.split('\t');
+        // Browser exporters can mix tabs and spaces between Netscape columns.
+        // Normalize valid rows to tabs before passing them to yt-dlp.
+        if (fields.length != 7) {
+          final match = RegExp(
+                  r'^(\S+)\s+(TRUE|FALSE)\s+(\S+)\s+(TRUE|FALSE)\s+(\d+)\s+(\S+)\s+([^\r\n]*)$')
+              .firstMatch(line);
+          if (match != null) {
+            fields = List.generate(7, (index) => match.group(index + 1)!);
+          }
+        }
         if (fields.length != 7 ||
             !['TRUE', 'FALSE'].contains(fields[1]) ||
             !['TRUE', 'FALSE'].contains(fields[3]) ||
             !fields[2].startsWith('/') ||
             int.tryParse(fields[4]) == null ||
-            int.parse(fields[4]) < 0 ||
-            fields[5].isEmpty) {
-          throw const FormatException('Cookie 文件格式无效，需要 Netscape 格式的 7 列数据');
+            int.parse(fields[4]) < 0) {
+          throw FormatException(
+              'Cookie 第 ${index + 1} 行格式无效：需要 Netscape 格式的 7 列数据。请从浏览器重新导出 cookies.txt。');
         }
-        domain(fields[0].replaceFirst('#HttpOnly_', ''));
+        // Some exporters include a nameless placeholder. Cookie jars cannot
+        // use it, but it should not invalidate the other cookies in the file.
+        if (fields[5].isEmpty) continue;
+        try {
+          domain(fields[0].replaceFirst('#HttpOnly_', ''));
+        } on FormatException {
+          throw FormatException('Cookie 第 ${index + 1} 行域名无效。');
+        }
         entries.add(fields.join('\t'));
       }
     } else {
