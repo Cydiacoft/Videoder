@@ -168,8 +168,8 @@ class _ImagePageState extends ConsumerState<ImagePage> {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme;
-    final configured =
-        ref.watch(appSettingsProvider).ffmpegPath?.isNotEmpty == true;
+    // Same rule as the sidebar: a path is only usable once it has been verified.
+    final configured = ref.watch(appSettingsProvider).ffmpegReady;
     final defaultOutput = ref.watch(appSettingsProvider).downloadPath;
     final chosenOutput = _outputDirectory ?? defaultOutput;
     return ListView(padding: const EdgeInsets.all(24), children: [

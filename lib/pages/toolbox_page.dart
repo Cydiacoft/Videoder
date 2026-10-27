@@ -226,7 +226,9 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
         audioOutput ? null : MediaCommand.codecForFormat(format, codecChoice);
     final gpuEncoder =
         settings.gpuAcceleration ? settings.gpu.encoderFor(codec ?? '') : null;
-    final configured = settings.ffmpegPath?.isNotEmpty == true;
+    // A selected path is not proof of a working engine: the provider only
+    // reports ready after `ffmpeg -version` succeeded.
+    final configured = settings.ffmpegReady;
     final desktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     return StudioPanel(
         child:
@@ -425,7 +427,11 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
                           size: 15, color: c.onSurfaceVariant),
                       const SizedBox(width: 8),
                       Expanded(
-                          child: Text('先配置 FFmpeg 引擎',
+                          child: Text(
+                              settings.ffmpegStatus ==
+                                      FfmpegStatus.notConfigured
+                                  ? '先配置 FFmpeg 引擎'
+                                  : settings.ffmpegSummary,
                               style: TextStyle(
                                   fontSize: 12, color: c.onSurfaceVariant))),
                       Icon(Icons.arrow_forward_rounded,
