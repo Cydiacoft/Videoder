@@ -2,8 +2,11 @@ name: Flutter
 on:
   push:
     branches: [main]
+  # `Dev` is the integration branch that community pull requests target, so the
+  # same checks must gate pull requests against it. Pushes still only gate
+  # `main` to keep the push budget for the release branch.
   pull_request:
-    branches: [main]
+    branches: [main, Dev]
   workflow_dispatch:
 permissions:
   contents: read
