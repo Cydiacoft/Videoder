@@ -8,9 +8,16 @@ import 'package:videoader/pages/image_page.dart';
 import 'package:videoader/pages/media_utilities_page.dart';
 import 'package:videoader/pages/expert_page.dart';
 import 'package:videoader/theme/studio_theme.dart';
+import 'package:videoader/providers/app_provider.dart';
 
-Widget screen(Widget page, {Brightness brightness = Brightness.light}) =>
+import 'support/verified_settings.dart';
+
+Widget screen(Widget page,
+        {Brightness brightness = Brightness.light}) =>
     ProviderScope(
+        overrides: [
+          appSettingsProvider.overrideWith((ref) => VerifiedAppSettings())
+        ],
         child: MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: studioTheme(brightness),

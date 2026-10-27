@@ -87,8 +87,12 @@ class _ImagePageState extends ConsumerState<ImagePage> {
 
   void _schedulePreview() {
     if (!mounted || _busy) return;
-    final ffmpeg = ref.read(appSettingsProvider).ffmpegPath;
-    if (_input == null || ffmpeg == null || ffmpeg.isEmpty) {
+    final settings = ref.read(appSettingsProvider);
+    final ffmpeg = settings.ffmpegPath;
+    if (!settings.ffmpegReady ||
+        _input == null ||
+        ffmpeg == null ||
+        ffmpeg.isEmpty) {
       _live.clear();
       return;
     }
@@ -237,9 +241,10 @@ class _ImagePageState extends ConsumerState<ImagePage> {
     try {
       await ref.read(appSettingsProvider.notifier).ready;
       if (!mounted || _stopRequested) throw const ImageProcessingCancelled();
-      final ffmpeg = ref.read(appSettingsProvider).ffmpegPath;
-      if (ffmpeg == null || ffmpeg.isEmpty) {
-        throw const FormatException('请先在设置中配置 FFmpeg');
+      final settings = ref.read(appSettingsProvider);
+      final ffmpeg = settings.ffmpegPath;
+      if (!settings.ffmpegReady || ffmpeg == null || ffmpeg.isEmpty) {
+        throw FormatException(settings.ffmpegError ?? settings.ffmpegSummary);
       }
       if (!retry) {
         _requestFor(_input ?? '').validate();
@@ -399,11 +404,13 @@ class _ImagePageState extends ConsumerState<ImagePage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(appSettingsProvider.select((settings) => settings.ffmpegPath),
+    ref.listen(
+        appSettingsProvider
+            .select((settings) => (settings.ffmpegPath, settings.ffmpegStatus)),
         (_, __) => _schedulePreview());
     final colors = Theme.of(context).colorScheme;
     final settings = ref.watch(appSettingsProvider);
-    final configured = settings.ffmpegPath?.isNotEmpty == true;
+    final configured = settings.ffmpegReady;
     final chosenOutput = _outputDirectory ?? settings.downloadPath;
     final source = EditorSection(
         step: '01',

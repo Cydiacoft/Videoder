@@ -47,8 +47,10 @@ class _MediaUtilitiesPageState extends ConsumerState<MediaUtilitiesPage> {
 
   void _schedulePreview() {
     if (!mounted || _busy) return;
-    final ffmpeg = ref.read(appSettingsProvider).ffmpegPath;
-    if (!_hasPreview ||
+    final settings = ref.read(appSettingsProvider);
+    final ffmpeg = settings.ffmpegPath;
+    if (!settings.ffmpegReady ||
+        !_hasPreview ||
         _input == null ||
         ffmpeg?.isNotEmpty != true ||
         (_operation == MediaUtility.watermark && _watermark == null)) {
@@ -183,6 +185,9 @@ class _MediaUtilitiesPageState extends ConsumerState<MediaUtilitiesPage> {
       _processor = processor;
     });
     try {
+      if (!settings.ffmpegReady) {
+        throw FormatException(settings.ffmpegError ?? settings.ffmpegSummary);
+      }
       final width = int.tryParse(_width.text.trim());
       final index = int.tryParse(_subtitle.text.trim());
       if (_operation == MediaUtility.watermark && width == null) {
@@ -273,11 +278,13 @@ class _MediaUtilitiesPageState extends ConsumerState<MediaUtilitiesPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(appSettingsProvider.select((settings) => settings.ffmpegPath),
+    ref.listen(
+        appSettingsProvider
+            .select((settings) => (settings.ffmpegPath, settings.ffmpegStatus)),
         (_, __) => _schedulePreview());
     final settings = ref.watch(appSettingsProvider);
     final colors = Theme.of(context).colorScheme;
-    final configured = settings.ffmpegPath?.isNotEmpty == true;
+    final configured = settings.ffmpegReady;
     final source = EditorSection(
         step: '01',
         title: '选择素材',

@@ -243,7 +243,9 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
         audioOutput ? null : MediaCommand.codecForFormat(format, codecChoice);
     final gpuEncoder =
         settings.gpuAcceleration ? settings.gpu.encoderFor(codec ?? '') : null;
-    final configured = settings.ffmpegPath?.isNotEmpty == true;
+    // A selected path is not proof of a working engine: the provider only
+    // reports ready after `ffmpeg -version` succeeded.
+    final configured = settings.ffmpegReady;
     final desktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     return StudioPanel(
         child:
@@ -442,7 +444,11 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
                           size: 15, color: c.onSurfaceVariant),
                       const SizedBox(width: 8),
                       Expanded(
-                          child: Text('先配置 FFmpeg 引擎',
+                          child: Text(
+                              settings.ffmpegStatus ==
+                                      FfmpegStatus.notConfigured
+                                  ? '先配置 FFmpeg 引擎'
+                                  : settings.ffmpegSummary,
                               style: TextStyle(
                                   fontSize: 12, color: c.onSurfaceVariant))),
                       Icon(Icons.arrow_forward_rounded,
@@ -460,18 +466,25 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
                   _input.isEmpty ||
                   directory.isEmpty
               ? null
-              : () => ref.read(mediaProvider.notifier).run(
-                  executable: settings.ffmpegPath!,
-                  operation: operation,
-                  input: _input,
-                  directory: directory,
-                  format: format,
-                  videoCodec: codecChoice,
-                  audioBitrate: _audioBitrate,
-                  crf: _crf.round(),
-                  start: _start.text,
-                  end: _end.text,
-                  gpu: settings.gpuAcceleration ? settings.gpu : null),
+              : () async {
+                  final current = ref.read(appSettingsProvider);
+                  if (!current.ffmpegReady ||
+                      current.ffmpegPath != settings.ffmpegPath) {
+                    return;
+                  }
+                  await ref.read(mediaProvider.notifier).run(
+                      executable: current.ffmpegPath!,
+                      operation: operation,
+                      input: _input,
+                      directory: directory,
+                      format: format,
+                      videoCodec: codecChoice,
+                      audioBitrate: _audioBitrate,
+                      crf: _crf.round(),
+                      start: _start.text,
+                      end: _end.text,
+                      gpu: current.gpuAcceleration ? current.gpu : null);
+                },
           icon: const Icon(Icons.play_arrow_rounded, size: 17),
           label: const Text('开始处理')),
       if (job.running)

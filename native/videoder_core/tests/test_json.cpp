@@ -204,19 +204,25 @@ VD_TEST(decodes_string_escapes) {
               Bytes({0xC3, 0xA9}) + "A");
 
   // A surrogate pair becomes one four-byte sequence.
-  VD_CHECK_EQ(std::string(ParseOrFail(R"json("\uD83D\uDE00")json").AsString()),
+  //
+  // The surrogate cases below spell their escapes with a doubled backslash in an
+  // ordinary literal rather than in a raw string. MSVC validates a lone
+  // surrogate as a universal-character-name even inside a raw string literal and
+  // rejects it with C3850, so `R"json("\uD83D")json"` does not compile there.
+  // `"\"\\uD83D\""` denotes exactly the same bytes, so the coverage is identical.
+  VD_CHECK_EQ(std::string(ParseOrFail("\"\\uD83D\\uDE00\"").AsString()),
               Bytes({0xF0, 0x9F, 0x98, 0x80}));
 
   // Unpaired surrogates become U+FFFD instead of failing the parse, and the
   // escape that follows a lone high surrogate is still decoded normally.
   const std::string replacement = Bytes({0xEF, 0xBF, 0xBD});
-  VD_CHECK_EQ(std::string(ParseOrFail(R"json("\uD83Dx")json").AsString()),
+  VD_CHECK_EQ(std::string(ParseOrFail("\"\\uD83Dx\"").AsString()),
               replacement + "x");
-  VD_CHECK_EQ(std::string(ParseOrFail(R"json("\uD83D\u0041")json").AsString()),
+  VD_CHECK_EQ(std::string(ParseOrFail("\"\\uD83D\\u0041\"").AsString()),
               replacement + "A");
-  VD_CHECK_EQ(std::string(ParseOrFail(R"json("\uDE00")json").AsString()),
+  VD_CHECK_EQ(std::string(ParseOrFail("\"\\uDE00\"").AsString()),
               replacement);
-  VD_CHECK_EQ(std::string(ParseOrFail(R"json("\uD83D\uD83D")json").AsString()),
+  VD_CHECK_EQ(std::string(ParseOrFail("\"\\uD83D\\uD83D\"").AsString()),
               replacement + replacement);
 
   // An escaped NUL is a real byte inside the string, not a terminator.
@@ -414,7 +420,9 @@ VD_TEST(dumps_control_characters_with_escapes) {
   const Value value =
       Value::String(std::string("a\bb\fc\nd\re\tf\"g\\h\001i"));
   VD_CHECK_EQ(value.Dump(),
-              std::string(R"json("a\bb\fc\nd\re\tf\"g\\h\u0001i")json"));
+              // `\u0001` is rejected by MSVC inside a raw string for the same
+              // reason as the surrogates above, so the escape is doubled here.
+              std::string("\"a\\bb\\fc\\nd\\re\\tf\\\"g\\\\h\\u0001i\""));
   VD_CHECK_EQ(std::string(ParseOrFail(value.Dump()).AsString()),
               std::string(value.AsString()));
 }
