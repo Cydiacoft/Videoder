@@ -92,9 +92,11 @@ class _ImagePageState extends ConsumerState<ImagePage> {
   Future<void> _run() async {
     try {
       await ref.read(appSettingsProvider.notifier).ready;
-      final ffmpeg = ref.read(appSettingsProvider).ffmpegPath;
-      if (ffmpeg == null || ffmpeg.isEmpty) {
-        throw const FormatException('请先在设置中配置 FFmpeg');
+      if (!mounted) return;
+      final settings = ref.read(appSettingsProvider);
+      final ffmpeg = settings.ffmpegPath;
+      if (!settings.ffmpegReady || ffmpeg == null || ffmpeg.isEmpty) {
+        throw FormatException(settings.ffmpegError ?? settings.ffmpegSummary);
       }
       final time = double.tryParse(_time.text.trim());
       if (_operation == ImageOperation.frame && time == null) {
@@ -168,8 +170,8 @@ class _ImagePageState extends ConsumerState<ImagePage> {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme;
-    final configured =
-        ref.watch(appSettingsProvider).ffmpegPath?.isNotEmpty == true;
+    // Same rule as the sidebar: a path is only usable once it has been verified.
+    final configured = ref.watch(appSettingsProvider).ffmpegReady;
     final defaultOutput = ref.watch(appSettingsProvider).downloadPath;
     final chosenOutput = _outputDirectory ?? defaultOutput;
     return ListView(padding: const EdgeInsets.all(24), children: [
