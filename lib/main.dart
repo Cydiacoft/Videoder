@@ -152,8 +152,10 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final job = ref.watch(mediaProvider);
-    final configured =
-        ref.watch(appSettingsProvider).ffmpegPath?.isNotEmpty == true;
+    final settings = ref.watch(appSettingsProvider);
+    // Only a successful `ffmpeg -version` counts as configured; picking a folder
+    // leaves the engine unproven until the verification in the provider says so.
+    final configured = settings.ffmpegReady;
     final enabled = ref.watch(extensionManagerProvider).enabled;
     final pages = ref
         .watch(availableExtensionsProvider)
@@ -250,7 +252,10 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                                 children: [
                                   Row(children: [
                                     Icon(Icons.memory_rounded,
-                                        size: 15, color: c.primary),
+                                        size: 15,
+                                        color: configured
+                                            ? c.primary
+                                            : c.error),
                                     const SizedBox(width: 7),
                                     const Text('本地媒体引擎',
                                         style: TextStyle(
@@ -258,13 +263,22 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                                             fontWeight: FontWeight.w600))
                                   ]),
                                   const SizedBox(height: 7),
-                                  Text(
-                                      configured
-                                          ? 'FFmpeg 已配置'
-                                          : '添加 FFmpeg 即可开始',
+                                  Text(settings.ffmpegSummary,
                                       style: TextStyle(
                                           fontSize: 12,
-                                          color: c.onSurfaceVariant))
+                                          color: configured
+                                              ? c.onSurfaceVariant
+                                              : c.error)),
+                                  if (settings.ffmpegError != null) ...[
+                                    const SizedBox(height: 5),
+                                    Text(settings.ffmpegError!,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            height: 1.45,
+                                            color: c.onSurfaceVariant))
+                                  ]
                                 ]))),
                   _nav(4, '设置与扩展', Icons.tune_rounded, narrow),
                   Padding(

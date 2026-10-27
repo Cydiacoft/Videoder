@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:videoader/pages/image_page.dart';
+import 'package:videoader/providers/app_provider.dart';
+
+import 'support/verified_settings.dart';
 
 void main() {
   testWidgets('image presets apply, save and reload from local preferences',
@@ -12,8 +15,9 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    Widget page() => const ProviderScope(
-        child: MaterialApp(home: Scaffold(body: ImagePage())));
+    Widget page() => ProviderScope(overrides: [
+          appSettingsProvider.overrideWith((ref) => VerifiedAppSettings())
+        ], child: const MaterialApp(home: Scaffold(body: ImagePage())));
     await tester.pumpWidget(page());
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('选择常用预设'));
@@ -57,8 +61,9 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const ProviderScope(
-        child: MaterialApp(home: Scaffold(body: ImagePage()))));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      appSettingsProvider.overrideWith((ref) => VerifiedAppSettings())
+    ], child: const MaterialApp(home: Scaffold(body: ImagePage()))));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(DropdownButton<String>));

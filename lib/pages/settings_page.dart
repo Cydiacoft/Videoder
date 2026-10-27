@@ -19,7 +19,6 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   String _status = '';
-  bool _checking = false;
   bool _checkingGpu = false;
   String _gpuStatus = '';
   Future<void> _guard(Future<void> Function() action) async {
@@ -72,6 +71,46 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ]));
   }
 
+  /// Renders the verification result owned by [AppSettings], the same value the
+  /// sidebar card shows, so the two surfaces cannot disagree.
+  Widget _engineResult(AppSettings settings) {
+    final c = Theme.of(context).colorScheme;
+    final status = settings.ffmpegStatus;
+    if (status == FfmpegStatus.notConfigured) return const SizedBox.shrink();
+    final ready = status == FfmpegStatus.ready;
+    final checking = status == FfmpegStatus.checking;
+    final color = ready
+        ? c.primary
+        : checking
+            ? c.onSurfaceVariant
+            : c.error;
+    return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(
+                    ready
+                        ? Icons.check_circle
+                        : checking
+                            ? Icons.hourglass_top
+                            : Icons.error_outline,
+                    size: 14,
+                    color: color),
+                const SizedBox(width: 7),
+                Expanded(
+                    child: Text(settings.ffmpegSummary,
+                        style: TextStyle(fontSize: 12, color: color)))
+              ]),
+              if (settings.ffmpegError != null) ...[
+                const SizedBox(height: 6),
+                SelectableText(settings.ffmpegError!,
+                    style: TextStyle(fontSize: 12, color: c.onSurfaceVariant))
+              ]
+            ]));
+  }
+
   bool _engineOpen = false;
   Widget _group(List<Widget> children) => StudioPanel(
       padding: EdgeInsets.zero,
@@ -120,6 +159,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final settings = ref.watch(appSettingsProvider);
+    final checking = settings.ffmpegStatus == FfmpegStatus.checking;
     final extensions = ref.watch(extensionManagerProvider);
     return ListView(padding: const EdgeInsets.all(28), children: [
       Row(children: [
@@ -153,20 +193,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               const SizedBox(height: 14),
               Wrap(spacing: 10, runSpacing: 8, children: [
                 OutlinedButton.icon(
-                    onPressed: _checking
+                    onPressed: checking
                         ? null
                         : () async {
-                            setState(() => _checking = true);
-                            await _guard(() async {
-                              final result = await ref
+                            try {
+                              await ref
                                   .read(appSettingsProvider.notifier)
                                   .checkFfmpeg();
-                              if (mounted) setState(() => _status = result);
-                            });
-                            if (mounted) setState(() => _checking = false);
+                            } catch (error) {
+                              if (!mounted) return;
+                              setState(() => _status = error is FormatException
+                                  ? error.message
+                                  : '$error');
+                            }
                           },
                     icon: const Icon(Icons.check_circle_outline, size: 15),
-                    label: Text(_checking ? '正在检测' : '检测版本')),
+                    label: Text(checking ? '正在检测' : '检测版本')),
                 TextButton.icon(
                     onPressed: () => _guard(() async {
                           if (!await launchUrl(
@@ -186,6 +228,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     padding: const EdgeInsets.only(top: 14),
                     child: SelectableText(_status,
                         style: TextStyle(fontSize: 12, color: c.primary))),
+              _engineResult(settings),
               const SizedBox(height: 26),
               const Divider(),
               const SizedBox(height: 18),
@@ -256,8 +299,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ListTile(
               leading: const Icon(Icons.memory_outlined),
               title: const Text('FFmpeg 引擎'),
-              subtitle: Text(settings.ffmpegPath ?? '尚未配置',
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                  settings.ffmpegPath == null
+                      ? '尚未配置'
+                      : settings.ffmpegSummary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => setState(() => _engineOpen = true)),
           ListTile(

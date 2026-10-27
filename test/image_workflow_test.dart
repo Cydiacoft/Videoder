@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:videoader/pages/image_page.dart';
+import 'package:videoader/providers/app_provider.dart';
 import 'package:videoader/theme/studio_theme.dart';
 
 class ImagePickerFixture extends FilePicker {
@@ -84,7 +85,15 @@ void main() {
         await loader.load();
       }
     }
+    late AppSettingsNotifier settings;
+    await tester.runAsync(() async {
+      settings = AppSettingsNotifier();
+      await settings.ready;
+      await settings.checkFfmpeg();
+    });
+    expect(settings.state.ffmpegReady, isTrue);
     await tester.pumpWidget(ProviderScope(
+        overrides: [appSettingsProvider.overrideWith((ref) => settings)],
         child: MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: studioTheme(Brightness.light),
