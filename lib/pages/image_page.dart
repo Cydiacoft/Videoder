@@ -92,9 +92,11 @@ class _ImagePageState extends ConsumerState<ImagePage> {
   Future<void> _run() async {
     try {
       await ref.read(appSettingsProvider.notifier).ready;
-      final ffmpeg = ref.read(appSettingsProvider).ffmpegPath;
-      if (ffmpeg == null || ffmpeg.isEmpty) {
-        throw const FormatException('请先在设置中配置 FFmpeg');
+      if (!mounted) return;
+      final settings = ref.read(appSettingsProvider);
+      final ffmpeg = settings.ffmpegPath;
+      if (!settings.ffmpegReady || ffmpeg == null || ffmpeg.isEmpty) {
+        throw FormatException(settings.ffmpegError ?? settings.ffmpegSummary);
       }
       final time = double.tryParse(_time.text.trim());
       if (_operation == ImageOperation.frame && time == null) {

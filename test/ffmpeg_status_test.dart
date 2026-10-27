@@ -21,6 +21,9 @@ class StubEngine extends AppSettingsNotifier {
   var _calls = 0;
 
   @override
+  Future<bool> probeFfmpegCapabilities(String path) async => false;
+
+  @override
   Future<ProcessResult> runVersionProbe(String executable) async {
     probes.add(executable);
     final index = _calls++;
@@ -53,11 +56,11 @@ void main() {
           '4.4.1');
     });
 
-    test('rejects nightlies and output from other tools', () {
+    test('does not invent a release number for nightlies or other tools', () {
       expect(AppSettings.parseFfmpegVersion('ffmpeg version N-119821-gabcdef'),
           isNull);
-      expect(
-          AppSettings.parseFfmpegVersion('ffmpeg version git-2021-01-01'), isNull);
+      expect(AppSettings.parseFfmpegVersion('ffmpeg version git-2021-01-01'),
+          isNull);
       expect(AppSettings.parseFfmpegVersion('ffprobe version 7.1'), isNull);
       expect(AppSettings.parseFfmpegVersion('not a tool at all'), isNull);
     });
@@ -73,9 +76,9 @@ void main() {
     await notifier.setFfmpegPath('C:/ffmpeg/bin/ffmpeg.exe');
     expect(notifier.state.ffmpegStatus, FfmpegStatus.ready);
     expect(notifier.state.ffmpegReady, isTrue);
-    expect(notifier.state.ffmpegVersion, '7.1.0');
+    expect(notifier.state.ffmpegVersion, '7.1');
     expect(notifier.state.ffmpegError, isNull);
-    expect(notifier.state.ffmpegSummary, contains('7.1.0'));
+    expect(notifier.state.ffmpegSummary, contains('7.1'));
     expect(notifier.probes, ['C:/ffmpeg/bin/ffmpeg.exe']);
   });
 
@@ -132,7 +135,7 @@ void main() {
     await nightly.ready;
     await nightly.setFfmpegPath('C:/nightly/ffmpeg.exe');
     expect(nightly.state.ffmpegStatus, FfmpegStatus.detectionFailed);
-    expect(nightly.state.ffmpegError, contains('无法识别'));
+    expect(nightly.state.ffmpegError, contains('编码器'));
   });
 
   test('a path restored from disk is re-verified, not trusted', () async {
@@ -144,15 +147,16 @@ void main() {
     await notifier.started.future;
     await Future<void>.delayed(Duration.zero);
     expect(notifier.state.ffmpegStatus, FfmpegStatus.ready);
-    expect(notifier.state.ffmpegVersion, '6.0.0');
+    expect(notifier.state.ffmpegVersion, '6.0');
   });
 
   test('replacing the path discards the result of the previous probe',
       () async {
     SharedPreferences.setMockInitialValues({});
-    final notifier = StubEngine(
-        [ProcessResult(0, 1, '', 'stale failure'), _version('ffmpeg version 7.1')],
-        slow: true);
+    final notifier = StubEngine([
+      ProcessResult(0, 1, '', 'stale failure'),
+      _version('ffmpeg version 7.1')
+    ], slow: true);
     addTearDown(notifier.dispose);
     await notifier.ready;
     final stale = notifier.setFfmpegPath('C:/old');

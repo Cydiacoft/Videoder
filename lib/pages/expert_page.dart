@@ -360,6 +360,9 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
 
   Future<void> _run() => _guard(() async {
         final settings = ref.read(appSettingsProvider);
+        if (!settings.ffmpegReady) {
+          throw FormatException(settings.ffmpegError ?? settings.ffmpegSummary);
+        }
         final args = ArgumentCodec.parse(_arguments.text);
         ExpertCommand.executionArguments(args, overwrite: _overwrite);
         setState(() {
@@ -398,7 +401,8 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
           enabled: !disabled,
           onChanged: (_) => _changed(),
           decoration: InputDecoration(labelText: label, hintText: hint));
-  Widget _audioSettings(bool busy, bool running) => StudioPanel(
+  Widget _audioSettings(bool busy, bool running, bool engineReady) =>
+      StudioPanel(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         DropdownButtonFormField<AudioPreset>(
@@ -513,7 +517,10 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
         const SizedBox(height: 18),
         Wrap(spacing: 12, runSpacing: 10, children: [
           FilledButton.icon(
-              onPressed: busy || _inputs.isEmpty || _output.text.isEmpty
+              onPressed: busy ||
+                      !engineReady ||
+                      _inputs.isEmpty ||
+                      _output.text.isEmpty
                   ? null
                   : () async {
                       if (_generate(openEditor: false)) {
@@ -540,7 +547,8 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final job = ref.watch(mediaProvider);
-    final enginePath = ref.watch(appSettingsProvider).ffmpegPath;
+    final settings = ref.watch(appSettingsProvider);
+    final enginePath = settings.ffmpegPath;
     if (_detectedPath != null && _detectedPath != enginePath) {
       _availableVideo = null;
       _availableAudio = null;
@@ -688,7 +696,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                 const SizedBox(height: 18),
                 if (_tab == 0) ...[
                   if (_audioMode)
-                    _audioSettings(busy, job.running)
+                    _audioSettings(busy, job.running, settings.ffmpegReady)
                   else
                     StudioPanel(
                         child: Column(
@@ -986,6 +994,7 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                           Wrap(spacing: 12, runSpacing: 10, children: [
                             FilledButton.icon(
                               onPressed: busy ||
+                                      !settings.ffmpegReady ||
                                       _inputs.isEmpty ||
                                       _output.text.trim().isEmpty ||
                                       wizardError != null
@@ -1124,10 +1133,11 @@ class _ExpertPageState extends ConsumerState<ExpertPage> {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               FilledButton.icon(
-                                  onPressed:
-                                      busy || _arguments.text.trim().isEmpty
-                                          ? null
-                                          : _run,
+                                  onPressed: busy ||
+                                          !settings.ffmpegReady ||
+                                          _arguments.text.trim().isEmpty
+                                      ? null
+                                      : _run,
                                   icon: const Icon(Icons.play_arrow, size: 17),
                                   label: const Text('执行命令')),
                               if (job.running)

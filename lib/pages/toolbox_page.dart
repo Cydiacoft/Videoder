@@ -449,18 +449,25 @@ class _ToolboxPageState extends ConsumerState<ToolboxPage> {
                   _input.isEmpty ||
                   directory.isEmpty
               ? null
-              : () => ref.read(mediaProvider.notifier).run(
-                  executable: settings.ffmpegPath!,
-                  operation: operation,
-                  input: _input,
-                  directory: directory,
-                  format: format,
-                  videoCodec: codecChoice,
-                  audioBitrate: _audioBitrate,
-                  crf: _crf.round(),
-                  start: _start.text,
-                  end: _end.text,
-                  gpu: settings.gpuAcceleration ? settings.gpu : null),
+              : () async {
+                  final current = ref.read(appSettingsProvider);
+                  if (!current.ffmpegReady ||
+                      current.ffmpegPath != settings.ffmpegPath) {
+                    return;
+                  }
+                  await ref.read(mediaProvider.notifier).run(
+                      executable: current.ffmpegPath!,
+                      operation: operation,
+                      input: _input,
+                      directory: directory,
+                      format: format,
+                      videoCodec: codecChoice,
+                      audioBitrate: _audioBitrate,
+                      crf: _crf.round(),
+                      start: _start.text,
+                      end: _end.text,
+                      gpu: current.gpuAcceleration ? current.gpu : null);
+                },
           icon: const Icon(Icons.play_arrow_rounded, size: 17),
           label: const Text('开始处理')),
       if (job.running)

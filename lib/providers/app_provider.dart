@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/app_update.dart';
+import '../services/ffmpeg_version.dart';
 import '../services/tool_process.dart';
 import '../services/media_inspector.dart';
 import '../services/gpu_acceleration.dart';
@@ -21,7 +21,7 @@ enum FfmpegStatus {
   /// A verification is running for the currently configured path.
   checking,
 
-  /// `ffmpeg -version` ran and reported a supported release.
+  /// A supported release, or a build whose capabilities were verified.
   ready,
 
   /// The configured path cannot be launched (wrong file, folder without a
@@ -95,29 +95,10 @@ class AppSettings {
         FfmpegStatus.detectionFailed => 'FFmpeg 检测未通过',
       };
 
-  /// Normalises the first line of `ffmpeg -version` into `major.minor.patch`.
-  ///
-  /// Real builds print wildly different shapes — `7.1`, `4.4.1`, `n4.4.1`,
-  /// `6.0-full_build`, `7.1-full_build-www.gyan.dev`. Nightlies such as
-  /// `N-119821-gabcdef` carry no release number and are reported as
-  /// unrecognised so they never pass as "configured".
-  static String? parseFfmpegVersion(String firstLine) {
-    final header =
-        RegExp(r'^ffmpeg version\s+(\S+)', caseSensitive: false).firstMatch(
-      firstLine.trim(),
-    );
-    if (header == null) return null;
-    // Release tarballs tag the version as `n4.4.1`; drop that marker only when a
-    // digit follows, so `N-119821-g…` stays unrecognised.
-    final token = header.group(1)!.replaceFirst(RegExp(r'^[nN](?=\d)'), '');
-    final numeric = RegExp(r'^(\d+\.\d+(?:\.\d+)*)').firstMatch(token);
-    if (numeric == null) return null;
-    final parts = numeric.group(1)!.split('.').toList();
-    while (parts.length < 3) {
-      parts.add('0');
-    }
-    return parts.take(3).join('.');
-  }
+  /// Normalised numbered release, or null for a build requiring capability
+  /// verification. The complete version is preserved in [ffmpegVersion].
+  static String? parseFfmpegVersion(String firstLine) =>
+      FfmpegVersion.parse(firstLine)?.release;
 
   AppSettings copyWith({
     String? ffmpegPath,
@@ -213,6 +194,13 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
   Future<ProcessResult> runVersionProbe(String executable) =>
       runTool(executable, ['-version']);
 
+  /// Reuse the existing native capability query (and its compatibility path)
+  /// for builds that cannot be compared to a numbered release.
+  Future<bool> probeFfmpegCapabilities(String path) async {
+    final capabilities = await MediaInspector.capabilities(path);
+    return capabilities.video.isNotEmpty || capabilities.audio.isNotEmpty;
+  }
+
   /// Runs the verification and swallows its failure.
   ///
   /// The outcome always lands on [state], so neither startup nor path selection
@@ -256,12 +244,21 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
     }
     // A path restored from disk has not been proven since this launch, so the
     // engine stays "not verified" until the background check finishes.
-    if (state.ffmpegPath?.isNotEmpty == true) unawaited(verifyFfmpeg());
+    if (mounted && state.ffmpegPath?.isNotEmpty == true) {
+      unawaited(verifyFfmpeg());
+    }
   }
 
   Future<void> setFfmpegPath(String path) async {
     await ready;
-    if (path == state.ffmpegPath) return;
+    if (!mounted) return;
+    if (path == state.ffmpegPath) {
+      await verifyFfmpeg();
+      return;
+    }
+    // Invalidate before publishing the path or awaiting persistence: an old
+    // probe can finish while the new settings are still being saved.
+    final change = ++_ffmpegCheckVersion;
     _gpuDetectionVersion++;
     if (mounted) {
       state = state.copyWith(
@@ -278,6 +275,7 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
           gpuEncoders: []);
     }
     await _saveGpuSettings();
+    if (!mounted || change != _ffmpegCheckVersion) return;
     // Prove the new path straight away. Picking a folder is a selection, not a
     // working engine, so nothing may report "configured" before this returns.
     await verifyFfmpeg();
@@ -398,15 +396,17 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
   }
 
   Future<String> _runFfmpegCheck() async {
+    if (!mounted) return _staleFfmpegResult;
     final path = state.ffmpegPath;
     if (path == null || path.isEmpty) {
       return _publishFfmpegResult(FfmpegStatus.notConfigured);
     }
     final token = ++_ffmpegCheckVersion;
-    bool stale() => !mounted || token != _ffmpegCheckVersion;
+    bool stale() =>
+        !mounted || token != _ffmpegCheckVersion || state.ffmpegPath != path;
     _publishFfmpegResult(FfmpegStatus.checking);
-    final executable = resolveExecutable(path, 'ffmpeg');
     try {
+      final executable = resolveExecutable(path, 'ffmpeg');
       final result = await runVersionProbe(executable);
       if (stale()) return _staleFfmpegResult;
       final output = result.stdout.toString().trim();
@@ -418,31 +418,34 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
                 ? 'FFmpeg 检测失败（退出码 ${result.exitCode}）：$executable'
                 : 'FFmpeg 检测失败：$detail');
       }
-      if (!firstLine.startsWith('ffmpeg version')) {
+      final version = FfmpegVersion.parse(firstLine);
+      if (version == null) {
         return _publishFfmpegResult(FfmpegStatus.detectionFailed,
             error: '该文件不是可识别的 FFmpeg：$executable');
       }
-      final version = AppSettings.parseFfmpegVersion(firstLine);
-      if (version == null) {
-        return _publishFfmpegResult(FfmpegStatus.detectionFailed,
-            error: '无法识别 FFmpeg 版本号：$firstLine');
-      }
-      if (AppUpdate.compareVersions(version, AppSettings.minimumFfmpegVersion) <
-          0) {
+      if (version.isOlderThan(AppSettings.minimumFfmpegVersion)) {
         return _publishFfmpegResult(FfmpegStatus.versionTooOld,
-            version: version,
+            version: version.raw,
             error:
-                '检测到 FFmpeg $version，应用需要 ${AppSettings.minimumFfmpegVersion} 及以上版本。');
+                '检测到 FFmpeg ${version.raw}，应用需要 ${AppSettings.minimumFfmpegVersion} 及以上版本。');
       }
-      return _publishFfmpegResult(FfmpegStatus.ready, version: version);
+      if (version.release == null) {
+        final usable = await probeFfmpegCapabilities(path);
+        if (stale()) return _staleFfmpegResult;
+        if (!usable) {
+          return _publishFfmpegResult(FfmpegStatus.detectionFailed,
+              version: version.raw, error: 'FFmpeg 未报告可用的音频或视频编码器。');
+        }
+      }
+      return _publishFfmpegResult(FfmpegStatus.ready, version: version.raw);
     } on ProcessException catch (error) {
       if (stale()) return _staleFfmpegResult;
       return _publishFfmpegResult(FfmpegStatus.executableMissing,
-          error: '找不到 FFmpeg 可执行文件：$executable（${error.message}）');
+          error: '找不到或无法启动 FFmpeg：$path（${error.message}）');
     } on TimeoutException catch (error) {
       if (stale()) return _staleFfmpegResult;
       return _publishFfmpegResult(FfmpegStatus.detectionFailed,
-          error: 'FFmpeg 检测超时：$executable（${error.message ?? '未响应'}）');
+          error: 'FFmpeg 检测超时：$path（${error.message ?? '未响应'}）');
     } on Object catch (error) {
       if (stale()) return _staleFfmpegResult;
       return _publishFfmpegResult(FfmpegStatus.detectionFailed,
