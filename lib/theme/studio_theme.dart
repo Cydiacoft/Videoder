@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
 
-ThemeData studioTheme(Brightness brightness) {
+import 'app_palette.dart';
+
+/// Studio theme for [brightness], optionally recoloured by [paletteId].
+///
+/// The neutral surface stack, typography and component shapes are defined here
+/// once and never come from the palette, so switching colours cannot change the
+/// layout or the contrast of panels, inputs and menus. Passing the default
+/// palette reproduces the shipped design exactly.
+ThemeData studioTheme(Brightness brightness,
+    {String paletteId = studioDefaultPaletteId}) {
   final dark = brightness == Brightness.dark;
+  final palette = paletteById(paletteId);
+  final accent = palette.accentFor(brightness);
   final colors = ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6875D9), brightness: brightness)
+          seedColor: palette.seed, brightness: brightness)
       .copyWith(
-    primary: dark ? const Color(0xFFAAB4FF) : const Color(0xFF5C69C6),
-    onPrimary: dark ? const Color(0xFF202749) : Colors.white,
-    primaryContainer: dark ? const Color(0xFF32394F) : const Color(0xFFEAEDFF),
-    onPrimaryContainer:
-        dark ? const Color(0xFFC5CEFF) : const Color(0xFF505DAC),
+    primary: accent.primary,
+    onPrimary: accent.onPrimary,
+    primaryContainer: accent.container,
+    onPrimaryContainer: accent.onContainer,
     surface: dark ? const Color(0xFF202126) : const Color(0xFFF8F9FC),
     surfaceContainerLowest: dark ? const Color(0xFF1A1B20) : Colors.white,
     surfaceContainerLow:

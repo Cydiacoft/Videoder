@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_provider.dart';
+import '../providers/appearance_provider.dart';
 import '../extensions/registry.dart';
 import '../extensions/toolbox_extension.dart';
 import '../services/gpu_acceleration.dart';
+import '../theme/app_palette.dart';
 import '../theme/studio_theme.dart';
 
 import 'about_page.dart';
@@ -110,6 +114,134 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ]));
   }
 
+  Future<void> _pickBackground() async {
+    final result = await FilePicker.platform
+        .pickFiles(type: FileType.image, dialogTitle: '选择背景图片');
+    final path = result?.files.single.path;
+    if (path == null || !mounted) return;
+    await ref.read(appearanceProvider.notifier).setBackgroundImage(path);
+  }
+
+  Widget _appearanceSlider({
+    required String label,
+    required String valueLabel,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required ValueChanged<double> onChanged,
+    required ValueChanged<double> onChangeEnd,
+  }) {
+    final c = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Text(label, style: const TextStyle(fontSize: 13)),
+        const Spacer(),
+        Text(valueLabel,
+            style: TextStyle(fontSize: 12, color: c.onSurfaceVariant))
+      ]),
+      Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: valueLabel,
+          onChanged: onChanged,
+          onChangeEnd: onChangeEnd),
+    ]);
+  }
+
+  Widget _appearancePanel(AppearanceSettings appearance) {
+    final c = Theme.of(context).colorScheme;
+    final notifier = ref.read(appearanceProvider.notifier);
+    final backgroundPath = appearance.backgroundImagePath;
+    return StudioPanel(
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(Icons.palette_outlined, size: 16, color: c.primary),
+        const SizedBox(width: 8),
+        const Text('配色方案',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        const Spacer(),
+        Text('只替换强调色',
+            style: TextStyle(fontSize: 12, color: c.onSurfaceVariant))
+      ]),
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final palette in appPalettes)
+          ChoiceChip(
+              avatar: CircleAvatar(
+                  backgroundColor: palette.swatch, radius: 7),
+              label: Text(palette.name),
+              selected: appearance.paletteId == palette.id,
+              onSelected: (_) =>
+                  _guard(() => notifier.setPalette(palette.id))),
+      ]),
+      const SizedBox(height: 8),
+      Text(appearance.palette.description,
+          style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+      const SizedBox(height: 16),
+      const Divider(),
+      const SizedBox(height: 12),
+      Row(children: [
+        Icon(Icons.science_outlined, size: 16, color: c.primary),
+        const SizedBox(width: 8),
+        const Text('实验性 · 自定义背景',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600))
+      ]),
+      const SizedBox(height: 6),
+      Text(
+          '选一张图片铺在界面后面，模糊和遮罩越高越接近默认外观。图片不会被复制，移动或删除后需要重新选择。',
+          style: TextStyle(fontSize: 12, height: 1.6, color: c.onSurfaceVariant)),
+      SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('启用自定义背景'),
+          subtitle: Text(appearance.hasBackground ? '已启用' : '未启用',
+              style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+          value: appearance.hasBackground,
+          onChanged: (value) => _guard(() async {
+                if (!value) {
+                  await notifier.setBackgroundImage(null);
+                } else {
+                  await _pickBackground();
+                }
+              })),
+      if (backgroundPath != null) ...[
+        _path(backgroundPath, () => _guard(_pickBackground)),
+        if (!File(backgroundPath).existsSync())
+          Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('找不到该文件，背景不会生效，请重新选择。',
+                  style: TextStyle(fontSize: 12, color: c.error))),
+        const SizedBox(height: 10),
+        _appearanceSlider(
+            label: '背景模糊',
+            valueLabel: '${appearance.backgroundBlur.round()} px',
+            value: appearance.backgroundBlur,
+            min: AppearanceSettings.minBlur,
+            max: AppearanceSettings.maxBlur,
+            divisions: (AppearanceSettings.maxBlur - AppearanceSettings.minBlur)
+                .round(),
+            onChanged: (value) =>
+                notifier.setBackgroundBlur(value, persist: false),
+            onChangeEnd: (value) => notifier.setBackgroundBlur(value)),
+        _appearanceSlider(
+            label: '背景遮罩',
+            valueLabel: '${(appearance.backgroundVeil * 100).round()}%',
+            value: appearance.backgroundVeil,
+            min: AppearanceSettings.minVeil,
+            max: AppearanceSettings.maxVeil,
+            divisions:
+                ((AppearanceSettings.maxVeil - AppearanceSettings.minVeil) * 100)
+                    .round(),
+            onChanged: (value) =>
+                notifier.setBackgroundVeil(value, persist: false),
+            onChangeEnd: (value) => notifier.setBackgroundVeil(value)),
+      ],
+    ]));
+  }
+
   bool _engineOpen = false;
   Widget _group(List<Widget> children) => StudioPanel(
       padding: EdgeInsets.zero,
@@ -158,6 +290,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final settings = ref.watch(appSettingsProvider);
+    final appearance = ref.watch(appearanceProvider);
     final checking = settings.ffmpegStatus == FfmpegStatus.checking;
     final extensions = ref.watch(extensionManagerProvider);
     return ListView(padding: const EdgeInsets.all(28), children: [
@@ -321,6 +454,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     }
                   })),
         ]),
+        const SizedBox(height: 26),
+        const Text('外观', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 10),
+        _appearancePanel(appearance),
         const SizedBox(height: 26),
         const Text('扩展', style: TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),

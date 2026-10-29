@@ -12,8 +12,10 @@ import 'pages/image_page.dart';
 import 'pages/toolbox_page.dart';
 import 'providers/media_provider.dart';
 import 'providers/app_provider.dart';
+import 'providers/appearance_provider.dart';
 import 'services/media_command.dart';
 import 'theme/studio_theme.dart';
+import 'widgets/studio_background.dart';
 
 /// Attaches to the native core before the first frame.
 ///
@@ -39,31 +41,44 @@ void main() {
   runApp(const ProviderScope(child: VideoaderApp()));
 }
 
-class VideoaderApp extends StatefulWidget {
+class VideoaderApp extends ConsumerStatefulWidget {
   const VideoaderApp({super.key});
   @override
-  State<VideoaderApp> createState() => _VideoaderAppState();
+  ConsumerState<VideoaderApp> createState() => _VideoaderAppState();
 }
 
-class _VideoaderAppState extends State<VideoaderApp> {
+class _VideoaderAppState extends ConsumerState<VideoaderApp> {
   ThemeMode _mode = ThemeMode.system;
   @override
-  Widget build(BuildContext context) => MaterialApp(
-      title: 'Videoder · FFmpeg Studio',
-      debugShowCheckedModeBanner: false,
-      theme: studioTheme(Brightness.light),
-      darkTheme: studioTheme(Brightness.dark),
-      themeMode: _mode,
-      home: MainLayout(
-          themeMode: _mode,
-          onThemeChanged: (mode) => setState(() => _mode = mode)));
+  Widget build(BuildContext context) {
+    final appearance = ref.watch(appearanceProvider);
+    return MaterialApp(
+        title: 'Videoder · FFmpeg Studio',
+        debugShowCheckedModeBanner: false,
+        theme: studioTheme(Brightness.light, paletteId: appearance.paletteId),
+        darkTheme: studioTheme(Brightness.dark, paletteId: appearance.paletteId),
+        themeMode: _mode,
+        home: StudioBackground(
+            settings: appearance,
+            child: MainLayout(
+                themeMode: _mode,
+                transparentBackground: appearance.hasBackground,
+                onThemeChanged: (mode) => setState(() => _mode = mode))));
+  }
 }
 
 class MainLayout extends ConsumerStatefulWidget {
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeChanged;
+
+  /// The custom background lives behind this layout, so the scaffold must not
+  /// paint an opaque surface over it.
+  final bool transparentBackground;
   const MainLayout(
-      {super.key, required this.themeMode, required this.onThemeChanged});
+      {super.key,
+      required this.themeMode,
+      required this.onThemeChanged,
+      this.transparentBackground = false});
   @override
   ConsumerState<MainLayout> createState() => _MainLayoutState();
 }
@@ -152,6 +167,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     if (_selected >= 7 + pages.length) _selected = 4;
     final narrow = MediaQuery.sizeOf(context).width < 860;
     return Scaffold(
+        backgroundColor:
+            widget.transparentBackground ? Colors.transparent : null,
         body: Column(children: [
       Expanded(
           child: Row(children: [
