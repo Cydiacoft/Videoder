@@ -72,8 +72,13 @@ void main() {
     expect(find.text('版本 ${await AppUpdate.currentVersion()}'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(Switch));
-    await tester.tap(find.byType(Switch));
+    // A plain `find.byType(Switch)` now also matches the appearance settings,
+    // so scope the search to the extension row this test drives.
+    final downloadSwitch = find.descendant(
+        of: find.widgetWithText(ListTile, 'yt-dlp 网络下载'),
+        matching: find.byType(Switch));
+    await tester.ensureVisible(downloadSwitch);
+    await tester.tap(downloadSwitch);
     await tester.pumpAndSettle();
     expect(find.text('网络下载'), findsOneWidget);
     await tester.tap(find.text('网络下载'));
@@ -110,10 +115,13 @@ void main() {
         ProviderScope.containerOf(tester.element(find.byType(MainLayout)));
     container.read(downloadMaintenanceProvider.notifier).state = true;
     await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+    final extensionSwitch = find.descendant(
+        of: find.widgetWithText(ListTile, 'yt-dlp 网络下载'),
+        matching: find.byType(Switch));
+    expect(tester.widget<Switch>(extensionSwitch).onChanged, isNull);
     container.read(downloadMaintenanceProvider.notifier).state = false;
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch));
+    await tester.tap(extensionSwitch);
     await tester.pumpAndSettle();
     expect(find.text('网络下载'), findsNothing);
     await tester.tap(find.text('专业工作台').first);
